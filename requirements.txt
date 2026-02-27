@@ -1,0 +1,5 @@
+Flask>=3.0.0
+Flask-Caching>=2.1.0
+psycopg2-binary>=2.9.9
+Pillow>=10.0.0
+imagehash>=4.3.1

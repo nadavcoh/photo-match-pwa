@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="theme-color" content="#18181b">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Photo Match">
+<link rel="manifest" href="/static/manifest.json">
+<link rel="apple-touch-icon" href="/static/icons/icon-180.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-32.png">
+<title>Photo Match</title>
+<style>
+/* ── Reset & tokens ───────────────────────────────────────────────────── */
+:root {
+  --bg:      #09090b;
+  --surface: #18181b;
+  --border:  #27272a;
+  --muted:   #52525b;
+  --subtle:  #3f3f46;
+  --text:    #fafafa;
+  --dim:     #a1a1aa;
+  --accent:  #f97316;
+  --green:   #22c55e;
+  --red:     #ef4444;
+  --blue:    #3b82f6;
+  --yellow:  #eab308;
+  --radius:  14px;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  font-size: 14px;
+}
+img { display: block; max-width: 100%; }
+button { font-family: inherit; cursor: pointer; }
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* ── Status bar ───────────────────────────────────────────────────────── */
+#status-bar {
+  display: flex; align-items: center; gap: 6px;
+  padding: 5px 16px;
+  background: var(--bg);
+  border-bottom: 1px solid var(--border);
+  font-size: .7rem;
+  color: var(--muted);
+  position: sticky; top: 0; z-index: 100;
+}
+.status-dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--green); flex-shrink: 0;
+  transition: background .4s;
+}
+.status-dot.offline { background: var(--red); animation: pulse 2s infinite; }
+.status-dot.checking { background: var(--yellow); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+#status-text { flex: 1; }
+#version-badge {
+  font-size: .65rem; color: var(--muted);
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 10px; padding: 2px 8px;
+}
+
+/* ── Header ───────────────────────────────────────────────────────────── */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+.logo {
+  font-size: 1.1rem; font-weight: 700; letter-spacing: -.3px;
+  display: flex; align-items: center; gap: 7px;
+}
+.logo-icon { font-size: 1.2rem; }
+.header-actions { display: flex; gap: 8px; align-items: center; }
+
+/* ── Buttons ──────────────────────────────────────────────────────────── */
+.btn {
+  border: none; border-radius: 20px; padding: 6px 14px;
+  font-size: .78rem; font-weight: 600; cursor: pointer;
+  transition: opacity .15s, transform .1s;
+  display: inline-flex; align-items: center; gap: 5px;
+}
+.btn:active { transform: scale(.96); }
+.btn-primary   { background: var(--accent); color: white; }
+.btn-ghost     { background: var(--surface); color: var(--dim); border: 1px solid var(--border); }
+.btn-green     { background: var(--green); color: white; }
+.btn-red       { background: var(--red); color: white; }
+.btn-blue      { background: var(--blue); color: white; }
+.btn-yellow    { background: var(--yellow); color: #09090b; }
+.btn-icon      { padding: 6px 10px; border-radius: 10px; }
+.btn:disabled  { opacity: .45; cursor: not-allowed; }
+.btn.loading   { opacity: .7; pointer-events: none; }
+
+/* ── Main layout ──────────────────────────────────────────────────────── */
+main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
+
+/* ── Progress ─────────────────────────────────────────────────────────── */
+#progress-bar {
+  height: 3px; background: var(--border);
+  border-radius: 2px; overflow: hidden; margin-bottom: 12px;
+}
+#progress-fill {
+  height: 100%; background: var(--accent);
+  border-radius: 2px; transition: width .4s ease;
+}
+#progress-label { font-size: .7rem; color: var(--muted); margin-bottom: 10px; }
+
+/* ── Cards ────────────────────────────────────────────────────────────── */
+.section-title {
+  font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--muted); margin-bottom: 8px;
+}
+
+/* ── Item card (the WA item to match) ────────────────────────────────── */
+#item-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; margin-bottom: 16px;
+}
+.item-card-inner {
+  display: flex; gap: 12px; padding: 12px;
+}
+.item-thumb {
+  width: 100px; height: 100px; object-fit: cover;
+  border-radius: 10px; flex-shrink: 0;
+  background: var(--border);
+}
+.item-thumb-placeholder {
+  width: 100px; height: 100px; border-radius: 10px;
+  background: var(--border); flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: var(--muted);
+}
+.item-meta { flex: 1; min-width: 0; }
+.item-filename {
+  font-size: .85rem; font-weight: 600; margin-bottom: 4px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.meta-row {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px;
+}
+.badge {
+  font-size: .62rem; font-weight: 600; padding: 2px 8px; border-radius: 10px;
+  background: var(--border); color: var(--dim);
+}
+.badge-video  { background: rgba(59,130,246,.15); color: #60a5fa; }
+.badge-image  { background: rgba(34,197,94,.15);  color: #4ade80; }
+.badge-rematch{ background: rgba(249,115,22,.15); color: #fb923c; }
+
+/* ── Item actions ─────────────────────────────────────────────────────── */
+.item-actions {
+  display: flex; gap: 8px; padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+/* ── Candidates grid ──────────────────────────────────────────────────── */
+#candidates-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.candidate-card {
+  background: var(--surface); border: 2px solid var(--border);
+  border-radius: var(--radius); overflow: hidden; cursor: pointer;
+  transition: border-color .15s, transform .1s;
+  position: relative;
+}
+.candidate-card:hover { border-color: var(--accent); }
+.candidate-card.selected { border-color: var(--green); }
+.candidate-card.auto-selected { border-color: var(--yellow); }
+.candidate-card:active { transform: scale(.98); }
+
+.candidate-thumb {
+  width: 100%; aspect-ratio: 1;
+  object-fit: cover; background: var(--border);
+}
+.candidate-thumb-ph {
+  width: 100%; aspect-ratio: 1;
+  background: var(--border);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 2rem; color: var(--muted);
+}
+.candidate-info { padding: 8px; }
+.candidate-filename {
+  font-size: .7rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+.candidate-badges { display: flex; gap: 3px; flex-wrap: wrap; margin-bottom: 4px; }
+.dist-badge {
+  font-size: .6rem; font-weight: 700; padding: 1px 6px;
+  border-radius: 8px; background: var(--border); color: var(--dim);
+}
+.dist-badge.good  { background: rgba(34,197,94,.15);  color: #4ade80; }
+.dist-badge.ok    { background: rgba(234,179,8,.15);   color: #facc15; }
+.dist-badge.bad   { background: rgba(239,68,68,.15);   color: #f87171; }
+.candidate-ts { font-size: .6rem; color: var(--muted); }
+
+.selected-check {
+  position: absolute; top: 6px; right: 6px;
+  width: 22px; height: 22px; border-radius: 50%;
+  background: var(--green); color: white;
+  display: none; align-items: center; justify-content: center;
+  font-size: .75rem; font-weight: 700;
+}
+.candidate-card.selected .selected-check { display: flex; }
+
+.auto-tag {
+  position: absolute; top: 6px; left: 6px;
+  font-size: .55rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px;
+  background: var(--yellow); color: #09090b;
+  padding: 2px 6px; border-radius: 6px;
+}
+
+/* ── Partner section ─────────────────────────────────────────────────── */
+#partner-section { margin-bottom: 16px; }
+#partner-section .section-title { color: var(--blue); }
+#partner-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: 8px;
+}
+.partner-card {
+  background: var(--surface); border: 1px solid rgba(59,130,246,.3);
+  border-radius: var(--radius); overflow: hidden;
+  padding: 8px;
+}
+.partner-filename {
+  font-size: .7rem; font-weight: 600;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  color: #93c5fd;
+}
+.partner-meta { font-size: .62rem; color: var(--muted); margin-top: 3px; }
+
+/* ── Empty / loading states ──────────────────────────────────────────── */
+.loading-spinner {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; gap: 12px; color: var(--muted);
+}
+.spinner {
+  width: 32px; height: 32px; border-radius: 50%;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.empty-state {
+  display: flex; flex-direction: column; align-items: center;
+  justify-content: center; padding: 60px 20px; text-align: center; gap: 8px;
+}
+.empty-state .icon { font-size: 3rem; margin-bottom: 8px; }
+.empty-state h2 { font-size: 1.2rem; }
+.empty-state p { font-size: .85rem; color: var(--muted); }
+
+/* ── Toast ────────────────────────────────────────────────────────────── */
+#toast-container {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 999; display: flex; flex-direction: column; gap: 8px;
+  pointer-events: none; width: min(360px, 90vw);
+}
+.toast {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: 12px; padding: 10px 16px;
+  font-size: .82rem; color: var(--text);
+  box-shadow: 0 4px 20px rgba(0,0,0,.4);
+  animation: toast-in .25s ease; pointer-events: all;
+  display: flex; align-items: center; gap: 8px;
+}
+.toast.success { border-left: 3px solid var(--green); }
+.toast.error   { border-left: 3px solid var(--red); }
+.toast.info    { border-left: 3px solid var(--blue); }
+@keyframes toast-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+
+/* ── Panel (settings/admin) ──────────────────────────────────────────── */
+.panel-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,.6);
+  z-index: 200; display: none; align-items: flex-end;
+}
+.panel-overlay.open { display: flex; }
+.panel {
+  background: var(--surface); border-radius: 20px 20px 0 0;
+  padding: 20px 18px 32px; width: 100%; max-height: 85vh;
+  overflow-y: auto;
+  animation: slide-up .3s ease;
+}
+@keyframes slide-up { from{transform:translateY(40px);opacity:0} to{transform:translateY(0);opacity:1} }
+.panel h2 { font-size: 1rem; font-weight: 700; margin-bottom: 16px; }
+.panel-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 0; border-bottom: 1px solid var(--border);
+  gap: 12px;
+}
+.panel-row:last-child { border: none; }
+.panel-row label { font-size: .85rem; color: var(--dim); }
+.panel-section { font-size: .65rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .8px; color: var(--muted); margin: 16px 0 8px; }
+
+/* ── Offset controls ─────────────────────────────────────────────────── */
+#nav-controls {
+  display: flex; align-items: center; gap: 8px; margin-bottom: 12px;
+}
+#offset-display {
+  font-size: .75rem; color: var(--muted);
+  background: var(--border); border-radius: 8px; padding: 4px 10px;
+  min-width: 80px; text-align: center;
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--subtle); border-radius: 3px; }
+
+/* ── Responsive ──────────────────────────────────────────────────────── */
+@media (min-width: 640px) {
+  #candidates-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
+  .item-thumb, .item-thumb-placeholder { width: 120px; height: 120px; }
+}
+</style>
+</head>
+<body>
+
+<!-- Status bar -->
+<div id="status-bar">
+  <div class="status-dot checking" id="status-dot"></div>
+  <span id="status-text">Connecting…</span>
+  <span id="version-badge">v{{ version }}</span>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="logo">
+    <span class="logo-icon">📷</span>
+    Photo Match
+  </div>
+  <div class="header-actions">
+    <button class="btn btn-ghost btn-icon" id="btn-panel" title="Settings & Admin">⚙️</button>
+  </div>
+</header>
+
+<!-- Main -->
+<main>
+  <div id="app">
+    <div class="loading-spinner" id="loading">
+      <div class="spinner"></div>
+      <span>Loading…</span>
+    </div>
+  </div>
+</main>
+
+<!-- Toast container -->
+<div id="toast-container"></div>
+
+<!-- Admin panel -->
+<div class="panel-overlay" id="panel-overlay">
+  <div class="panel">
+    <h2>⚙️ Settings & Admin</h2>
+
+    <div class="panel-section">Version</div>
+    <div class="panel-row">
+      <label>App version</label>
+      <span id="panel-version" style="font-family:monospace;font-size:.78rem;color:var(--accent)">{{ version }}</span>
+    </div>
+
+    <div class="panel-section">Deployment</div>
+    <div class="panel-row">
+      <label>Pull latest & restart</label>
+      <button class="btn btn-primary" id="btn-deploy">🚀 Deploy</button>
+    </div>
+    <div class="panel-row">
+      <label>Download a-Shell deploy script</label>
+      <button class="btn btn-ghost" id="btn-fetch-script">📥 Fetch script</button>
+    </div>
+
+    <div class="panel-section">Options</div>
+    <div class="panel-row">
+      <label>Auto-advance after commit</label>
+      <input type="checkbox" id="opt-auto-advance" checked style="width:18px;height:18px;cursor:pointer;">
+    </div>
+    <div class="panel-row">
+      <label>Show partner candidates</label>
+      <input type="checkbox" id="opt-show-partner" checked style="width:18px;height:18px;cursor:pointer;">
+    </div>
+
+    <div style="margin-top:20px">
+      <button class="btn btn-ghost" style="width:100%" id="btn-close-panel">Close</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+const state = {
+  offset:       0,
+  data:         null,
+  selectedId:   null,
+  loading:      false,
+  online:       true,
+};
+
+// Client-side cache for match responses
+const matchCache = new Map();  // offset → {data, ts}
+const MATCH_CACHE_TTL = 30_000; // 30s
+
+// ── Utilities ─────────────────────────────────────────────────────────────────
+function qs(sel, ctx = document) { return ctx.querySelector(sel); }
+function qsa(sel, ctx = document) { return [...ctx.querySelectorAll(sel)]; }
+
+function toast(msg, type = "info", duration = 3000) {
+  const t = document.createElement("div");
+  t.className = `toast ${type}`;
+  t.textContent = msg;
+  qs("#toast-container").appendChild(t);
+  setTimeout(() => t.remove(), duration);
+}
+
+function setStatus(online, label) {
+  const dot  = qs("#status-dot");
+  const text = qs("#status-text");
+  dot.className  = "status-dot" + (online ? "" : " offline");
+  text.textContent = label;
+  state.online = online;
+}
+
+function setStatusChecking() {
+  qs("#status-dot").className = "status-dot checking";
+  qs("#status-text").textContent = "Checking…";
+}
+
+async function checkOnlineStatus() {
+  setStatusChecking();
+  try {
+    const r = await fetch("/health", { cache: "no-store" });
+    if (r.ok) {
+      const d = await r.json();
+      setStatus(true, `Online — ${d.version}`);
+      qs("#panel-version").textContent = d.version;
+      qs("#version-badge").textContent = `v${d.version}`;
+      return true;
+    }
+  } catch {}
+  setStatus(false, "Server unreachable");
+  return false;
+}
+
+// ── API helpers ───────────────────────────────────────────────────────────────
+async function apiFetch(url, opts = {}) {
+  try {
+    const r = await fetch(url, opts);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: r.statusText }));
+      throw new Error(err.error || r.statusText);
+    }
+    return await r.json();
+  } catch (e) {
+    if (!state.online) throw new Error("Offline — server unreachable");
+    throw e;
+  }
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+async function loadMatch(offset = 0, bustCache = false) {
+  if (state.loading) return;
+  state.loading = true;
+  state.offset  = offset;
+  state.selectedId = null;
+  renderApp({ loading: true });
+
+  // Check client cache
+  if (!bustCache) {
+    const cached = matchCache.get(offset);
+    if (cached && (Date.now() - cached.ts < MATCH_CACHE_TTL)) {
+      state.data = cached.data;
+      state.loading = false;
+      renderApp({ loading: false });
+      prefetchNext(offset);
+      return;
+    }
+  }
+
+  try {
+    const data = await apiFetch(`/api/match/${offset}`);
+    matchCache.set(offset, { data, ts: Date.now() });
+    state.data = data;
+    // Pre-select auto-select
+    if (data.auto_select_id) state.selectedId = data.auto_select_id;
+  } catch (e) {
+    toast(e.message, "error");
+    renderApp({ error: e.message });
+    state.loading = false;
+    return;
+  }
+
+  state.loading = false;
+  renderApp({ loading: false });
+  prefetchNext(offset);
+}
+
+function prefetchNext(offset) {
+  // Background prefetch of next item
+  const next = offset + 1;
+  if (!matchCache.has(next) || Date.now() - (matchCache.get(next)?.ts || 0) > MATCH_CACHE_TTL) {
+    fetch(`/api/match/${next}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) matchCache.set(next, { data: d, ts: Date.now() }); })
+      .catch(() => {});
+  }
+}
+
+function renderApp({ loading = false, error = null } = {}) {
+  const app = qs("#app");
+
+  if (loading) {
+    app.innerHTML = `<div class="loading-spinner"><div class="spinner"></div><span>Loading match…</span></div>`;
+    return;
+  }
+  if (error) {
+    app.innerHTML = `<div class="empty-state"><div class="icon">⚠️</div><h2>Error</h2><p>${error}</p>
+      <button class="btn btn-primary" onclick="loadMatch(0,true)" style="margin-top:16px">Retry</button></div>`;
+    return;
+  }
+  if (!state.data) return;
+
+  const { count, offset, item, candidates, partner_candidates, auto_select_id } = state.data;
+
+  if (!item || count === 0) {
+    app.innerHTML = `<div class="empty-state">
+      <div class="icon">🎉</div>
+      <h2>All done!</h2>
+      <p>No more items to match.</p>
+      <button class="btn btn-ghost" onclick="loadMatch(0,true)" style="margin-top:16px">↻ Refresh</button>
+    </div>`;
+    return;
+  }
+
+  // Build HTML
+  const filetype = item.filetype || "";
+  const ftBadge  = filetype.toLowerCase().includes("video")
+    ? `<span class="badge badge-video">Video</span>`
+    : filetype.toLowerCase().includes("image")
+    ? `<span class="badge badge-image">Image</span>`
+    : `<span class="badge">${filetype}</span>`;
+  const rematchBadge = item.has_ids_hash
+    ? `<span class="badge badge-rematch">Rematch</span>` : "";
+
+  const ts = item.timestamp ? new Date(item.timestamp).toLocaleDateString() : "";
+
+  const pct = Math.max(0, 100 - Math.round((offset / Math.max(count, 1)) * 100));
+
+  let html = `
+    <!-- Progress -->
+    <div id="progress-bar"><div id="progress-fill" style="width:${pct}%"></div></div>
+    <div id="progress-label">${count} remaining · item ${offset + 1}</div>
+
+    <!-- Nav controls -->
+    <div id="nav-controls">
+      <button class="btn btn-ghost btn-icon" id="btn-prev" ${offset === 0 ? "disabled" : ""}>‹ Prev</button>
+      <div id="offset-display">offset ${offset}</div>
+      <button class="btn btn-ghost btn-icon" id="btn-next">Next ›</button>
+      <button class="btn btn-ghost btn-icon" id="btn-refresh" title="Refresh">↻</button>
+    </div>
+
+    <!-- Item card -->
+    <div class="section-title">Item to match</div>
+    <div id="item-card">
+      <div class="item-card-inner">
+        <img class="item-thumb" src="/api/wa-thumbnail/${item.id}"
+             alt="thumbnail" loading="lazy"
+             onerror="this.outerHTML='<div class=item-thumb-placeholder>🖼️</div>'">
+        <div class="item-meta">
+          <div class="item-filename">${escHtml(item.filename || "(no filename)")}</div>
+          <div class="meta-row">
+            ${ftBadge}
+            ${rematchBadge}
+            ${ts ? `<span class="badge">${ts}</span>` : ""}
+            <span class="badge">#${item.id}</span>
+          </div>
+        </div>
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-green" id="btn-commit">✓ Commit selected</button>
+        <button class="btn btn-ghost" id="btn-no-match">✗ No match</button>
+        ${item.has_ids_hash ? `<button class="btn btn-yellow" id="btn-rematch">⟳ Rematch</button>` : ""}
+        <button class="btn btn-ghost" id="btn-skip">Skip</button>
+      </div>
+    </div>
+  `;
+
+  // Candidates
+  html += `<div class="section-title">${candidates.length} candidate match${candidates.length !== 1 ? "es" : ""}</div>`;
+  if (candidates.length === 0) {
+    html += `<div class="empty-state" style="padding:30px"><p>No candidates found within threshold.</p></div>`;
+  } else {
+    html += `<div id="candidates-grid">`;
+    for (const c of candidates) {
+      const isSelected  = state.selectedId === c.id;
+      const isAutoSel   = auto_select_id === c.id && !state.selectedId;
+      const cls = isSelected ? "selected" : (isAutoSel && !state.selectedId ? "auto-selected" : "");
+      const dist = c.hamming_distance;
+      const distCls = dist === null ? "" : dist <= 5 ? "good" : dist <= 12 ? "ok" : "bad";
+      const cTs = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : "";
+      html += `
+        <div class="candidate-card ${cls}" data-id="${c.id}">
+          ${isAutoSel ? `<div class="auto-tag">Auto ⚡</div>` : ""}
+          <div class="selected-check">✓</div>
+          <img class="candidate-thumb" src="/api/thumbnail/${c.id}"
+               alt="candidate" loading="lazy"
+               onerror="this.outerHTML='<div class=candidate-thumb-ph>🖼️</div>'">
+          <div class="candidate-info">
+            <div class="candidate-filename">${escHtml(c.filename || "")}</div>
+            <div class="candidate-badges">
+              ${dist !== null ? `<span class="dist-badge ${distCls}">H:${dist}</span>` : ""}
+              ${c.thumb_dist !== null ? `<span class="dist-badge">T:${c.thumb_dist?.toFixed(1)}</span>` : ""}
+              ${c.camera_name ? `<span class="dist-badge" style="background:rgba(34,197,94,.1);color:#4ade80">📷</span>` : ""}
+              ${c.location ? `<span class="dist-badge" style="background:rgba(59,130,246,.1);color:#60a5fa">📍</span>` : ""}
+            </div>
+            ${cTs ? `<div class="candidate-ts">${cTs}</div>` : ""}
+            ${c.url ? `<div class="candidate-ts"><a href="${escHtml(c.url)}" target="_blank">🔗 link</a></div>` : ""}
+          </div>
+        </div>`;
+    }
+    html += `</div>`;
+  }
+
+  // Partner
+  const showPartner = localStorage.getItem("opt-show-partner") !== "false";
+  if (showPartner && partner_candidates.length > 0) {
+    html += `<div id="partner-section">
+      <div class="section-title" style="color:var(--blue)">Partner — ${partner_candidates.length} result${partner_candidates.length !== 1 ? "s" : ""}</div>
+      <div id="partner-grid">`;
+    for (const p of partner_candidates) {
+      const pTs = p.timestamp ? new Date(p.timestamp).toLocaleDateString() : "";
+      html += `<div class="partner-card">
+        <div class="partner-filename">${escHtml(p.filename || "")}</div>
+        <div class="partner-meta">${[p.camera_name, p.location, pTs].filter(Boolean).join(" · ")}</div>
+      </div>`;
+    }
+    html += `</div></div>`;
+  }
+
+  app.innerHTML = html;
+
+  // Wire events
+  qs("#btn-prev")?.addEventListener("click", () => loadMatch(Math.max(0, state.offset - 1)));
+  qs("#btn-next")?.addEventListener("click", () => loadMatch(state.offset + 1));
+  qs("#btn-refresh")?.addEventListener("click", () => loadMatch(state.offset, true));
+  qs("#btn-commit")?.addEventListener("click", doCommit);
+  qs("#btn-no-match")?.addEventListener("click", doNoMatch);
+  qs("#btn-rematch")?.addEventListener("click", doRematch);
+  qs("#btn-skip")?.addEventListener("click", doSkip);
+
+  qsa(".candidate-card").forEach(card => {
+    card.addEventListener("click", () => {
+      const id = parseInt(card.dataset.id);
+      if (state.selectedId === id) {
+        state.selectedId = null;
+        qsa(".candidate-card").forEach(c => c.classList.remove("selected"));
+        card.classList.remove("selected");
+      } else {
+        state.selectedId = id;
+        qsa(".candidate-card").forEach(c => c.classList.remove("selected", "auto-selected"));
+        card.classList.add("selected");
+      }
+    });
+    if (auto_select_id && !state.selectedId) {
+      const ac = qs(`[data-id="${auto_select_id}"]`);
+      if (ac) ac.classList.add("auto-selected");
+    }
+  });
+
+  // Restore auto-select classes if state.selectedId was pre-set
+  if (state.selectedId) {
+    const sc = qs(`[data-id="${state.selectedId}"]`);
+    if (sc) {
+      sc.classList.add("selected");
+      sc.classList.remove("auto-selected");
+    }
+  }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+// ── Actions ───────────────────────────────────────────────────────────────────
+async function doCommit() {
+  const effectiveId = state.selectedId || state.data?.auto_select_id;
+  if (!effectiveId) { toast("Select a candidate first", "error"); return; }
+  const btn = qs("#btn-commit");
+  btn.classList.add("loading"); btn.textContent = "Committing…";
+  try {
+    await apiFetch("/api/match/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wa_id: state.data.item.id, hash_id: effectiveId, offset: state.offset }),
+    });
+    // Bust cache for current and nearby offsets
+    matchCache.delete(state.offset);
+    toast("✓ Committed!", "success");
+    const autoAdv = localStorage.getItem("opt-auto-advance") !== "false";
+    if (autoAdv) await loadMatch(state.offset, true);
+  } catch (e) {
+    toast(e.message, "error");
+    btn.classList.remove("loading"); btn.textContent = "✓ Commit selected";
+  }
+}
+
+async function doNoMatch() {
+  if (!state.data?.item) return;
+  try {
+    await apiFetch("/api/match/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wa_id: state.data.item.id, hash_id: null, offset: state.offset }),
+    });
+    matchCache.delete(state.offset);
+    toast("Marked as no match", "info");
+    await loadMatch(state.offset, true);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function doRematch() {
+  if (!state.data?.item) return;
+  try {
+    await apiFetch("/api/match/commit", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wa_id: state.data.item.id, rematch: true }),
+    });
+    matchCache.delete(state.offset);
+    toast("Reset for rematch", "info");
+    await loadMatch(state.offset, true);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+async function doSkip() {
+  if (!state.data?.item) return;
+  try {
+    await apiFetch("/api/match/skip", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ wa_id: state.data.item.id }),
+    });
+    matchCache.delete(state.offset);
+    toast("Skipped", "info");
+    await loadMatch(state.offset, true);
+  } catch (e) {
+    toast(e.message, "error");
+  }
+}
+
+// ── Admin panel ───────────────────────────────────────────────────────────────
+qs("#btn-panel").addEventListener("click", () => {
+  qs("#panel-overlay").classList.add("open");
+  // Restore checkboxes
+  qs("#opt-auto-advance").checked = localStorage.getItem("opt-auto-advance") !== "false";
+  qs("#opt-show-partner").checked = localStorage.getItem("opt-show-partner") !== "false";
+});
+qs("#btn-close-panel").addEventListener("click", () => qs("#panel-overlay").classList.remove("open"));
+qs("#panel-overlay").addEventListener("click", e => {
+  if (e.target === qs("#panel-overlay")) qs("#panel-overlay").classList.remove("open");
+});
+
+qs("#opt-auto-advance").addEventListener("change", e => {
+  localStorage.setItem("opt-auto-advance", e.target.checked);
+});
+qs("#opt-show-partner").addEventListener("change", e => {
+  localStorage.setItem("opt-show-partner", e.target.checked);
+});
+
+qs("#btn-deploy").addEventListener("click", async () => {
+  const btn = qs("#btn-deploy");
+  btn.classList.add("loading"); btn.textContent = "Deploying…";
+  try {
+    const r = await apiFetch("/api/deploy", { method: "POST" });
+    toast("🚀 Deploy started! Server will restart.", "success", 5000);
+    setTimeout(() => checkOnlineStatus(), 4000);
+  } catch (e) {
+    toast(e.message, "error");
+  } finally {
+    btn.classList.remove("loading"); btn.textContent = "🚀 Deploy";
+  }
+});
+
+qs("#btn-fetch-script").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = "/api/deploy-script";
+  a.download = "deploy_patch.py";
+  a.click();
+  toast("Downloading a-Shell deploy script…", "info");
+});
+
+// ── Service Worker ────────────────────────────────────────────────────────────
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", async () => {
+    try {
+      const reg = await navigator.serviceWorker.register("/static/sw.js", { scope: "/" });
+      reg.addEventListener("updatefound", () => {
+        const nw = reg.installing;
+        nw.addEventListener("statechange", () => {
+          if (nw.state === "installed" && navigator.serviceWorker.controller) {
+            toast("Update available — refresh to get the latest", "info", 6000);
+            nw.postMessage({ type: "SKIP_WAITING" });
+          }
+        });
+      });
+    } catch (e) {
+      console.warn("SW registration failed:", e);
+    }
+  });
+}
+
+// ── Online / offline events ────────────────────────────────────────────────────
+window.addEventListener("online",  () => { checkOnlineStatus(); });
+window.addEventListener("offline", () => setStatus(false, "Network offline"));
+
+// ── Keyboard shortcuts ────────────────────────────────────────────────────────
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT") return;
+  if (e.key === "Enter" || e.key === "c") doCommit();
+  if (e.key === "ArrowRight" || e.key === "n") loadMatch(state.offset + 1);
+  if (e.key === "ArrowLeft"  || e.key === "p") loadMatch(Math.max(0, state.offset - 1));
+  if (e.key === "r") loadMatch(state.offset, true);
+  if (e.key === "s") doSkip();
+  // Select candidate by number
+  const num = parseInt(e.key);
+  if (num >= 1 && num <= 9) {
+    const cards = qsa(".candidate-card");
+    const card  = cards[num - 1];
+    if (card) card.click();
+  }
+});
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(async () => {
+  // Check online status first
+  await checkOnlineStatus();
+  // Periodic health check every 30s
+  setInterval(checkOnlineStatus, 30_000);
+  // Load first match
+  await loadMatch(0);
+})();
+</script>
+</body>
+</html>
