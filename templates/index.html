@@ -376,12 +376,16 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 
     <div class="panel-section">Deployment</div>
     <div class="panel-row">
-      <label>Pull latest & restart</label>
+      <label>Pull latest &amp; restart server</label>
       <button class="btn btn-primary" id="btn-deploy">🚀 Deploy</button>
     </div>
     <div class="panel-row">
-      <label>Download a-Shell deploy script</label>
-      <button class="btn btn-ghost" id="btn-fetch-script">📥 Fetch script</button>
+      <label>a-Shell: deploy patch via GitHub PR</label>
+      <button class="btn btn-ghost" id="btn-fetch-deploy-script">📥 deploy_patch.py</button>
+    </div>
+    <div class="panel-row">
+      <label>a-Shell: fetch &amp; open repo in Claude</label>
+      <button class="btn btn-ghost" id="btn-fetch-fetch-script">📥 fetch_photo_match.py</button>
     </div>
 
     <div class="panel-section">Options</div>
@@ -802,12 +806,20 @@ qs("#btn-deploy").addEventListener("click", async () => {
   }
 });
 
-qs("#btn-fetch-script").addEventListener("click", () => {
+qs("#btn-fetch-deploy-script").addEventListener("click", () => {
   const a = document.createElement("a");
   a.href = "/api/deploy-script";
   a.download = "deploy_patch.py";
   a.click();
-  toast("Downloading a-Shell deploy script…", "info");
+  toast("📥 Downloading deploy_patch.py…", "info");
+});
+
+qs("#btn-fetch-fetch-script").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = "/api/fetch-script";
+  a.download = "fetch_photo_match.py";
+  a.click();
+  toast("📥 Downloading fetch_photo_match.py…", "info");
 });
 
 // ── Service Worker ────────────────────────────────────────────────────────────

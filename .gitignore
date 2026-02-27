@@ -1,0 +1,12 @@
+venv/
+__pycache__/
+*.pyc
+*.pyo
+config.json
+*.db
+app.log
+static/thumbnails_cache/
+*.pem
+*.key
+*.crt
+.env
