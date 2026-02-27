@@ -1,0 +1,120 @@
+name: Deploy to server
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Connect to Tailscale
+        uses: tailscale/github-action@v4
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:github-actions
+
+      - name: Trigger deployment webhook
+        env:
+          SERVER_CERT: ${{ secrets.SERVER_CERT }}
+        run: |
+          HOST="your-host.ts.net"
+          PORT="5000"
+          HTTPS_URL="https://$HOST:$PORT/webhook"
+          HTTP_URL="http://$HOST:$PORT/webhook"
+
+          # All diagnostic output goes to stderr (>&2) so it prints to the log
+          # but is NOT captured when we do CODE=$(do_curl ...).
+          # Only the bare HTTP status code is echoed to stdout.
+
+          echo "════════════════════════════════════════" >&2
+          echo " 📷 Photo Match — Deploy webhook"        >&2
+          echo "════════════════════════════════════════" >&2
+          echo " Host : $HOST"                           >&2
+          echo " Port : $PORT"                           >&2
+          echo " Time : $(date -u '+%Y-%m-%d %H:%M:%S UTC')" >&2
+          echo "════════════════════════════════════════" >&2
+          echo ""                                        >&2
+
+          if [ -z "$SERVER_CERT" ]; then
+            echo "ERROR: SERVER_CERT secret is not set." >&2
+            echo "Add your server certificate PEM to:"   >&2
+            echo "  GitHub → Settings → Secrets → Actions → SERVER_CERT" >&2
+            exit 1
+          fi
+
+          echo "$SERVER_CERT" > /tmp/server.crt
+          echo "TLS : Using SERVER_CERT secret for certificate verification" >&2
+          echo "" >&2
+
+          do_curl() {
+            local url="$1"
+            local scheme="$2"
+
+            echo "──────────────────────────────────────────" >&2
+            echo "Attempting $scheme: $url"                  >&2
+            echo "──────────────────────────────────────────" >&2
+
+            # Run curl: verbose to stderr, body to file, http code to stdout
+            local code
+            code=$(curl \
+              --verbose \
+              --stderr curl_verbose.txt \
+              -o response_body.txt \
+              -w "%{http_code}" \
+              -X POST \
+              -H "Content-Type: application/json" \
+              -H "X-GitHub-Event: push" \
+              -d '{"ref":"refs/heads/main"}' \
+              --max-time 20 \
+              --cacert /tmp/server.crt \
+              "$url") || code="CURL_ERROR_$?"
+
+            echo ""                          >&2
+            echo "── curl verbose output ──" >&2
+            cat curl_verbose.txt             >&2
+            echo ""                          >&2
+            echo "── response body ──"       >&2
+            cat response_body.txt            >&2
+            echo ""                          >&2
+            echo "── HTTP status code: $code ──" >&2
+            echo ""                          >&2
+
+            # Only the code goes to stdout — this is what CODE=$(...) captures
+            echo "$code"
+          }
+
+          # ── Try HTTPS ────────────────────────────────────────────────────
+          echo "STEP 1: Trying HTTPS..." >&2
+          CODE=$(do_curl "$HTTPS_URL" "HTTPS")
+
+          if [ "$CODE" = "200" ]; then
+            echo "✓ HTTPS deploy succeeded (HTTP $CODE)" >&2
+            exit 0
+          fi
+
+          echo "✗ HTTPS failed (code='$CODE')" >&2
+          echo ""                              >&2
+
+          # ── Fall back to HTTP ────────────────────────────────────────────
+          echo "STEP 2: Falling back to HTTP..." >&2
+          CODE=$(do_curl "$HTTP_URL" "HTTP")
+
+          if [ "$CODE" = "200" ]; then
+            echo "✓ HTTP deploy succeeded (HTTP $CODE)" >&2
+            exit 0
+          fi
+
+          echo "✗ HTTP also failed (code='$CODE')" >&2
+          echo ""                                  >&2
+          echo "════════════════════════════════════════" >&2
+          echo " DEPLOYMENT FAILED"                      >&2
+          echo " Check that:"                            >&2
+          echo "   1. Tailscale is running on the server" >&2
+          echo "   2. Flask is running (run.bat / run.sh)" >&2
+          echo "   3. Port $PORT is correct"             >&2
+          echo "   4. SERVER_CERT matches the server cert" >&2
+          echo "════════════════════════════════════════" >&2
+          exit 1

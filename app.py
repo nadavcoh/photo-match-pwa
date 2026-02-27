@@ -505,7 +505,7 @@ def api_skip():
 
 @app.route("/api/deploy-script")
 def deploy_script():
-    """Serve the a-Shell deploy script for download."""
+    """Serve the a-Shell deploy/patch script for download."""
     script_path = os.path.join(os.path.dirname(__file__), "scripts", "deploy_patch.py")
     if not os.path.exists(script_path):
         abort(404)
@@ -516,6 +516,21 @@ def deploy_script():
         content,
         mimetype="text/plain",
         headers={"Content-Disposition": "attachment; filename=deploy_patch.py"}
+    )
+
+@app.route("/api/fetch-script")
+def fetch_script():
+    """Serve the a-Shell fetch script for download."""
+    script_path = os.path.join(os.path.dirname(__file__), "scripts", "fetch_photo_match.py")
+    if not os.path.exists(script_path):
+        abort(404)
+    with open(script_path) as f:
+        content = f.read()
+    from flask import Response
+    return Response(
+        content,
+        mimetype="text/plain",
+        headers={"Content-Disposition": "attachment; filename=fetch_photo_match.py"}
     )
 
 # ─── STATIC / PWA ROUTES ──────────────────────────────────────────────────────
