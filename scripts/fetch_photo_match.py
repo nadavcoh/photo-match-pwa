@@ -28,7 +28,7 @@ if os.path.exists(CONFIG_PATH):
             config[k.strip()] = v.strip()
 
 GITHUB_REPO = config.get("GITHUB_REPO", "youruser/photo-match-pwa")
-GITHUB_URL  = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/main.tar.gz"
+GITHUB_URL  = f"https://github.com/{GITHUB_REPO}/archive/refs/heads/master.tar.gz"
 DEST_DIR    = os.path.expanduser("~/Documents")
 DEST_FILE   = os.path.join(DEST_DIR, "photo_match_patch.tar.gz")
 # ──────────────────────────────────────────────────────────────────────────────
