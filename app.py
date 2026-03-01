@@ -228,6 +228,29 @@ def serve_thumbnail(hash_id):
         pass
     abort(404)
 
+@app.route("/api/partner-thumbnail/<int:partner_id>")
+def serve_partner_thumbnail(partner_id):
+    os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
+    cache_path = os.path.join(THUMB_CACHE_DIR, f"partner_{partner_id}.jpg")
+    if os.path.exists(cache_path):
+        resp = send_from_directory(THUMB_CACHE_DIR, f"partner_{partner_id}.jpg", mimetype="image/jpeg")
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+    try:
+        conn, cur = get_db()
+        cur.execute("SELECT thumbnail FROM partner WHERE id = %s", (partner_id,))
+        row = cur.fetchone()
+        if row and row[0]:
+            img_bytes = bytes(row[0]) if isinstance(row[0], memoryview) else row[0]
+            with open(cache_path, "wb") as f:
+                f.write(img_bytes)
+            resp = send_from_directory(THUMB_CACHE_DIR, f"partner_{partner_id}.jpg", mimetype="image/jpeg")
+            resp.headers["Cache-Control"] = "public, max-age=86400"
+            return resp
+    except Exception:
+        pass
+    abort(404)
+
 @app.route("/api/wa-thumbnail/<int:wa_id>")
 def serve_wa_thumbnail(wa_id):
     os.makedirs(THUMB_CACHE_DIR, exist_ok=True)
@@ -298,6 +321,7 @@ def api_match(offset=0):
             cur.execute("""
                 SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                        timestamp, url, preview_url,
+                       width, height, filesize,
                        video_thumb_hash <-> %s AS thumb_dist
                 FROM hashes
                 WHERE id = ANY(%s)
@@ -309,6 +333,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
+                           width, height, filesize,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM hashes
@@ -324,6 +349,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
+                           width, height, filesize,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM hashes
                     WHERE hash <@ (%s, %s)
@@ -347,6 +373,10 @@ def api_match(offset=0):
                 "thumb_to_hash": float(c["thumb_to_hash"]) if c.get("thumb_to_hash") is not None else None,
                 "thumbnail_url": f"/api/thumbnail/{c['id']}",
                 "hamming_distance": hamming_distance(row["hash"], c["hash"]),
+                "origin":        "hashes",
+                "width":         c.get("width"),
+                "height":        c.get("height"),
+                "filesize":      c.get("filesize"),
             }
             candidates.append(cd)
 
@@ -429,14 +459,21 @@ def api_match(offset=0):
             partner_raw = cur.fetchall()
             for p in partner_raw:
                 partner_candidates.append({
-                    "id":           p["id"],
-                    "filename":     p["filename"],
-                    "camera_name":  p.get("camera_name"),
-                    "location":     p.get("location"),
-                    "timestamp":    p["timestamp"].isoformat() if p.get("timestamp") else None,
-                    "url":          p.get("url"),
-                    "thumb_dist":   float(p["thumb_dist"]) if p.get("thumb_dist") is not None else None,
-                    "thumb_to_hash":float(p["thumb_to_hash"]) if p.get("thumb_to_hash") is not None else None,
+                    "id":            p["id"],
+                    "filename":      p["filename"],
+                    "camera_name":   p.get("camera_name"),
+                    "location":      p.get("location"),
+                    "timestamp":     p["timestamp"].isoformat() if p.get("timestamp") else None,
+                    "url":           p.get("url"),
+                    "thumb_dist":    float(p["thumb_dist"]) if p.get("thumb_dist") is not None else None,
+                    "thumb_to_hash": float(p["thumb_to_hash"]) if p.get("thumb_to_hash") is not None else None,
+                    "thumbnail_url": f"/api/partner-thumbnail/{p['id']}",
+                    "origin":        "partner",
+                    "width":         p.get("width"),
+                    "height":        p.get("height"),
+                    "filesize":      p.get("filesize"),
+                    "hamming_distance": hamming_distance(row["hash"], p.get("hash")),
+                    "preview_url":   p.get("preview_url"),
                 })
         except Exception:
             pass  # partner table may not exist
