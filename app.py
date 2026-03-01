@@ -34,6 +34,13 @@ app.secret_key = os.environ.get("FLASK_SECRET", "photo-match-pwa-secret-key-chan
 
 HAMMING_DISTANCE_THRESHOLD = int(os.environ.get("HAMMING_THRESHOLD", "10"))
 
+# ─── UNDO STATE ───────────────────────────────────────────────────────────────
+# Stores enough info to reverse the most recent commit
+_last_commit = {
+    "wa_id":        None,
+    "prev_id_hash": None,   # value before the commit (to restore on undo)
+}
+
 # ─── CACHING ──────────────────────────────────────────────────────────────────
 # Server-side cache: simple in-memory (swap to Redis by changing CACHE_TYPE)
 cache_config = {
@@ -305,13 +312,19 @@ def api_match(offset=0):
         if not row:
             return jsonify({"count": 0, "item": None, "candidates": [], "partner_candidates": []})
 
+        fname = row["filename"] or ""
+        static_media_url = None
+        if fname.startswith("Media"):
+            static_media_url = f"/static/{fname}"
+
         wa_item = {
-            "id":              row["id"],
-            "filename":        row["filename"],
-            "filetype":        row["filetype"],
-            "timestamp":       row["timestamp"].isoformat() if row["timestamp"] else None,
-            "thumbnail_url":   f"/api/wa-thumbnail/{row['id']}",
-            "has_ids_hash":    row["ids_hash"] is not None,
+            "id":               row["id"],
+            "filename":         fname,
+            "filetype":         row["filetype"],
+            "timestamp":        row["timestamp"].isoformat() if row["timestamp"] else None,
+            "thumbnail_url":    f"/api/wa-thumbnail/{row['id']}",
+            "has_ids_hash":     row["ids_hash"] is not None,
+            "static_media_url": static_media_url,
         }
 
         # ── Fetch candidate matches ──────────────────────────────────────────
@@ -321,7 +334,7 @@ def api_match(offset=0):
             cur.execute("""
                 SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                        timestamp, url, preview_url,
-                       origin,
+                       origin, size, filesize,
                        video_thumb_hash <-> %s AS thumb_dist
                 FROM hashes
                 WHERE id = ANY(%s)
@@ -333,7 +346,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           origin,
+                           origin, size, filesize,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM hashes
@@ -349,7 +362,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           origin,
+                           origin, size, filesize,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM hashes
                     WHERE hash <@ (%s, %s)
@@ -373,7 +386,10 @@ def api_match(offset=0):
                 "thumb_to_hash": float(c["thumb_to_hash"]) if c.get("thumb_to_hash") is not None else None,
                 "thumbnail_url": f"/api/thumbnail/{c['id']}",
                 "hamming_distance": hamming_distance(row["hash"], c["hash"]),
-                "origin":        c.get("origin") or "hashes",
+                "source":        "hashes",
+                "origin":        c.get("origin"),
+                "size":          c.get("size"),
+                "filesize":      c.get("filesize"),
             }
             candidates.append(cd)
 
@@ -465,7 +481,8 @@ def api_match(offset=0):
                     "thumb_dist":    float(p["thumb_dist"]) if p.get("thumb_dist") is not None else None,
                     "thumb_to_hash": float(p["thumb_to_hash"]) if p.get("thumb_to_hash") is not None else None,
                     "thumbnail_url": f"/api/partner-thumbnail/{p['id']}",
-                    "origin":        "partner",
+                    "source":        "partner",
+                    "origin":        None,
                     "hamming_distance": hamming_distance(row["hash"], p.get("hash")),
                     "preview_url":   p.get("preview_url"),
                 })
@@ -479,6 +496,7 @@ def api_match(offset=0):
             "candidates":         candidates,
             "partner_candidates": partner_candidates,
             "auto_select_id":     auto_select_id,
+            "has_undo":           _last_commit["wa_id"] is not None,
         })
 
     except Exception as e:
@@ -500,6 +518,11 @@ def api_commit():
 
     try:
         conn, cur = get_db()
+        # Save previous state for undo
+        cur.execute("SELECT id_hash FROM wa WHERE id = %s", (wa_id,))
+        prev_row = cur.fetchone()
+        _last_commit["wa_id"]        = wa_id
+        _last_commit["prev_id_hash"] = prev_row["id_hash"] if prev_row else None
         if rematch:
             cur.execute("UPDATE wa SET ids_hash = NULL WHERE id = %s", (wa_id,))
         else:
@@ -515,6 +538,25 @@ def api_commit():
         app.logger.error(f"commit error: {e}", exc_info=True)
         return jsonify({"error": str(e)}), 500
 
+
+@app.route("/api/match/undo", methods=["POST"])
+def api_undo():
+    """Undo the most recent commit by restoring the previous id_hash value."""
+    wa_id = _last_commit.get("wa_id")
+    if not wa_id:
+        return jsonify({"error": "Nothing to undo"}), 400
+    try:
+        conn, cur = get_db()
+        prev = _last_commit["prev_id_hash"]
+        cur.execute("UPDATE wa SET id_hash = %s WHERE id = %s", (prev, wa_id))
+        conn.commit()
+        undone_wa_id = wa_id
+        _last_commit["wa_id"]        = None
+        _last_commit["prev_id_hash"] = None
+        return jsonify({"ok": True, "undone_wa_id": undone_wa_id, "restored_id_hash": prev})
+    except Exception as e:
+        app.logger.error(f"undo error: {e}", exc_info=True)
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/match/skip", methods=["POST"])
 def api_skip():
