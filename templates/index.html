@@ -226,12 +226,22 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 
 /* ── Partner section ─────────────────────────────────────────────────── */
 #partner-section { margin-bottom: 16px; }
-.badge-partner { background: rgba(59,130,246,.15); color: #60a5fa; }
-.badge-hashes  { background: rgba(168,85,247,.15);  color: #c084fc; }
-.candidate-card[data-origin="partner"] {
+.badge-source-hashes  { background: rgba(168,85,247,.15); color: #c084fc; }
+.badge-source-partner { background: rgba(59,130,246,.15); color: #60a5fa; }
+.candidate-card[data-source="partner"] {
   cursor: default; opacity: .85;
 }
-.candidate-card[data-origin="partner"]:hover { border-color: var(--border); }
+.candidate-card[data-source="partner"]:hover { border-color: var(--border); }
+/* Media preview next to WA thumbnail */
+.item-media-preview {
+  width: 100px; height: 100px; object-fit: cover;
+  border-radius: 10px; flex-shrink: 0;
+  background: var(--border);
+}
+.item-media-video {
+  width: 100px; height: 100px; object-fit: cover;
+  border-radius: 10px; flex-shrink: 0;
+}
 
 /* ── Empty / loading states ──────────────────────────────────────────── */
 .loading-spinner {
@@ -581,6 +591,13 @@ function renderApp({ loading = false, error = null } = {}) {
         <img class="item-thumb" src="/api/wa-thumbnail/${item.id}"
              alt="thumbnail" loading="lazy"
              onerror="this.outerHTML='<div class=item-thumb-placeholder>🖼️</div>'">
+        ${(item.filename || "").toLowerCase().startsWith("media") ? `
+          <div class="item-media-preview">
+            ${(item.filename || "").toLowerCase().endsWith(".mp4")
+              ? `<video src="/static/${escHtml(item.filename)}" autoplay muted loop playsinline></video>`
+              : `<img src="/static/${escHtml(item.filename)}" alt="media preview"
+                   onerror="this.parentElement.style.display='none'">`}
+          </div>` : ""}
         <div class="item-meta">
           <div class="item-filename">${escHtml(item.filename || "(no filename)")}</div>
           <div class="meta-row">
@@ -594,24 +611,23 @@ function renderApp({ loading = false, error = null } = {}) {
       <div class="item-actions">
         <button class="btn btn-green" id="btn-commit">✓ Commit selected</button>
         ${item.has_ids_hash ? `<button class="btn btn-yellow" id="btn-rematch">⟳ Rematch</button>` : ""}
+        <button class="btn btn-ghost" id="btn-undo">↩ Undo</button>
       </div>
     </div>
   `;
 
   // ── Helper to render a candidate card (used for both hashes and partner) ──
   function candidateCard(c, isAutoSelectId) {
-    const isSelected = state.selectedId === c.id && state.selectedOrigin === c.origin;
-    // Uniquely identify: id + origin to avoid collisions between hashes/partner
-    const uid = `${c.origin}-${c.id}`;
+    const isSelected = state.selectedId === c.id && state.selectedOrigin === c.source;
     const isAutoSel = isAutoSelectId && !state.selectedId;
     const cls = isSelected ? "selected" : (isAutoSel ? "auto-selected" : "");
     const dist = c.hamming_distance;
     const distCls = dist === null ? "" : dist <= 5 ? "good" : dist <= 12 ? "ok" : "bad";
     const cTs = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : "";
-    const originCls = c.origin === "partner" ? "badge-partner" : "badge-hashes";
-    const originLabel = c.origin || "hashes";
+    const sourceCls   = c.source === "partner" ? "badge-source-partner" : "badge-source-hashes";
+    const sourceLabel = c.source === "partner" ? "Partner" : "Hashes";
     return `
-      <div class="candidate-card ${cls}" data-id="${c.id}" data-origin="${c.origin}">
+      <div class="candidate-card ${cls}" data-id="${c.id}" data-source="${c.source}" data-origin="${c.origin || ''}">
         ${isAutoSel ? `<div class="auto-tag">Auto ⚡</div>` : ""}
         <div class="selected-check">✓</div>
         <img class="candidate-thumb" src="${escHtml(c.thumbnail_url)}"
@@ -620,14 +636,15 @@ function renderApp({ loading = false, error = null } = {}) {
         <div class="candidate-info">
           <div class="candidate-filename">${escHtml(c.filename || "")}</div>
           <div class="candidate-badges">
-            <span class="dist-badge ${originCls}">${c.origin}</span>
+            <span class="dist-badge ${sourceCls}">${sourceLabel}</span>
+            ${c.origin ? `<span class="dist-badge" title="Origin">${escHtml(c.origin)}</span>` : ""}
             ${dist !== null ? `<span class="dist-badge ${distCls}">H:${dist}</span>` : ""}
             ${c.thumb_dist != null ? `<span class="dist-badge">T:${c.thumb_dist.toFixed(1)}</span>` : ""}
             ${c.camera_name ? `<span class="dist-badge" style="background:rgba(34,197,94,.1);color:#4ade80">📷</span>` : ""}
             ${c.location ? `<span class="dist-badge" style="background:rgba(59,130,246,.1);color:#60a5fa">📍</span>` : ""}
           </div>
           <div class="candidate-ts">
-            ${cTs}
+            ${[cTs, c.size, c.filesize ? (c.filesize.match(/\(([^)]+)\)/) || [,""])[1] || c.filesize : ""].filter(Boolean).join(" · ")}
           </div>
           ${c.url ? `<div class="candidate-ts"><a href="${escHtml(c.url)}" target="_blank">🔗 link</a></div>` : ""}
         </div>
@@ -648,7 +665,7 @@ function renderApp({ loading = false, error = null } = {}) {
   } else {
     html += `<div id="candidates-grid">`;
     for (const c of allCandidates) {
-      html += candidateCard(c, auto_select_id === c.id && c.origin === "hashes");
+      html += candidateCard(c, auto_select_id === c.id && c.source === "hashes");
     }
     html += `</div>`;
   }
@@ -661,27 +678,28 @@ function renderApp({ loading = false, error = null } = {}) {
   qs("#btn-refresh")?.addEventListener("click", () => loadMatch(state.offset, true));
   qs("#btn-commit")?.addEventListener("click", doCommit);
   qs("#btn-rematch")?.addEventListener("click", doRematch);
+  qs("#btn-undo")?.addEventListener("click", doUndo);
 
   qsa(".candidate-card").forEach(card => {
     // Partner cards are display-only — cannot be committed
-    if (card.dataset.origin === "partner") return;
+    if (card.dataset.source === "partner") return;
 
     card.addEventListener("click", () => {
       const id     = parseInt(card.dataset.id);
-      const origin = card.dataset.origin;
-      if (state.selectedId === id && state.selectedOrigin === origin) {
+      const source = card.dataset.source;
+      if (state.selectedId === id && state.selectedOrigin === source) {
         // Deselect
         state.selectedId     = null;
         state.selectedOrigin = null;
         qsa(".candidate-card").forEach(c => c.classList.remove("selected", "auto-selected"));
         // Re-show auto tag if one exists
         if (auto_select_id) {
-          const ac = qs(`[data-id="${auto_select_id}"][data-origin="hashes"]`);
+          const ac = qs(`[data-id="${auto_select_id}"][data-source="hashes"]`);
           if (ac) ac.classList.add("auto-selected");
         }
       } else {
         state.selectedId     = id;
-        state.selectedOrigin = origin;
+        state.selectedOrigin = source;
         qsa(".candidate-card").forEach(c => c.classList.remove("selected", "auto-selected"));
         card.classList.add("selected");
       }
@@ -718,6 +736,21 @@ async function doCommit() {
   } catch (e) {
     toast(e.message, "error");
     btn.classList.remove("loading"); btn.textContent = "✓ Commit selected";
+  }
+}
+
+async function doUndo() {
+  const btn = qs("#btn-undo");
+  if (btn) { btn.classList.add("loading"); btn.textContent = "Undoing…"; }
+  try {
+    await apiFetch("/api/match/undo", { method: "POST" });
+    matchCache.clear();
+    toast("↩ Undone — last commit reversed", "info");
+    await loadMatch(state.offset, true);
+  } catch (e) {
+    toast(e.message || "Nothing to undo", "error");
+  } finally {
+    if (btn) { btn.classList.remove("loading"); btn.textContent = "↩ Undo"; }
   }
 }
 
