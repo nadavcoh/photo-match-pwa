@@ -89,7 +89,7 @@ print(f"Repo    : {GITHUB_REPO}\n")
 # Clone or pull
 if os.path.isdir(os.path.join(WORK_DIR, ".git")):
     print("→ Updating existing clone...")
-    run("lg2", "checkout", "main", cwd=WORK_DIR)
+    run("lg2", "checkout", "master", cwd=WORK_DIR)
     run("lg2", "pull", cwd=WORK_DIR)
 else:
     print("→ Cloning repo...")
