@@ -296,7 +296,7 @@ def api_match(offset=0):
         if row["ids_hash"] is not None:
             # Pre-filtered list
             cur.execute("""
-                SELECT id, filename, filetype, hash, video_thumb_hash, camera_name, location,
+                SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                        timestamp, url, preview_url,
                        video_thumb_hash <-> %s AS thumb_dist
                 FROM hashes
@@ -307,7 +307,7 @@ def api_match(offset=0):
             filetype = row["filetype"] or ""
             if filetype in ("Video", "video/mp4"):
                 cur.execute("""
-                    SELECT id, filename, filetype, hash, video_thumb_hash, camera_name, location,
+                    SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
@@ -322,7 +322,7 @@ def api_match(offset=0):
                 ))
             elif filetype in ("Image", "image/jpeg"):
                 cur.execute("""
-                    SELECT id, filename, filetype, hash, video_thumb_hash, camera_name, location,
+                    SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM hashes
@@ -338,7 +338,6 @@ def api_match(offset=0):
             cd = {
                 "id":            c["id"],
                 "filename":      c["filename"],
-                "filetype":      c.get("filetype"),
                 "camera_name":   c.get("camera_name"),
                 "location":      c.get("location"),
                 "timestamp":     c["timestamp"].isoformat() if c.get("timestamp") else None,
@@ -407,7 +406,7 @@ def api_match(offset=0):
         try:
             if filetype in ("Video", "video/mp4"):
                 cur.execute("""
-                    SELECT id, filename, filetype, camera_name, location, timestamp, url,
+                    SELECT id, filename, camera_name, location, timestamp, url,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM partner
@@ -421,7 +420,7 @@ def api_match(offset=0):
                 ))
             elif filetype in ("Image", "image/jpeg"):
                 cur.execute("""
-                    SELECT id, filename, filetype, camera_name, location, timestamp, url,
+                    SELECT id, filename, camera_name, location, timestamp, url,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM partner
                     WHERE hash <@ (%s, %s)
