@@ -226,23 +226,8 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 
 /* ── Partner section ─────────────────────────────────────────────────── */
 #partner-section { margin-bottom: 16px; }
-#partner-section .section-title { color: var(--blue); }
-#partner-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 8px;
-}
-.partner-card {
-  background: var(--surface); border: 1px solid rgba(59,130,246,.3);
-  border-radius: var(--radius); overflow: hidden;
-  padding: 8px;
-}
-.partner-filename {
-  font-size: .7rem; font-weight: 600;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  color: #93c5fd;
-}
-.partner-meta { font-size: .62rem; color: var(--muted); margin-top: 3px; }
+.badge-partner { background: rgba(59,130,246,.15); color: #60a5fa; }
+.badge-hashes  { background: rgba(168,85,247,.15);  color: #c084fc; }
 
 /* ── Empty / loading states ──────────────────────────────────────────── */
 .loading-spinner {
@@ -407,11 +392,12 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 const state = {
-  offset:       0,
-  data:         null,
-  selectedId:   null,
-  loading:      false,
-  online:       true,
+  offset:         0,
+  data:           null,
+  selectedId:     null,
+  selectedOrigin: null,
+  loading:        false,
+  online:         true,
 };
 
 // Client-side cache for match responses
@@ -477,9 +463,10 @@ async function apiFetch(url, opts = {}) {
 // ── Main render ───────────────────────────────────────────────────────────────
 async function loadMatch(offset = 0, bustCache = false) {
   if (state.loading) return;
-  state.loading = true;
-  state.offset  = offset;
-  state.selectedId = null;
+  state.loading        = true;
+  state.offset         = offset;
+  state.selectedId     = null;
+  state.selectedOrigin = null;
   renderApp({ loading: true });
 
   // Check client cache
@@ -487,6 +474,10 @@ async function loadMatch(offset = 0, bustCache = false) {
     const cached = matchCache.get(offset);
     if (cached && (Date.now() - cached.ts < MATCH_CACHE_TTL)) {
       state.data = cached.data;
+      if (cached.data.auto_select_id) {
+        state.selectedId     = cached.data.auto_select_id;
+        state.selectedOrigin = "hashes";
+      }
       state.loading = false;
       renderApp({ loading: false });
       prefetchNext(offset);
@@ -499,7 +490,10 @@ async function loadMatch(offset = 0, bustCache = false) {
     matchCache.set(offset, { data, ts: Date.now() });
     state.data = data;
     // Pre-select auto-select
-    if (data.auto_select_id) state.selectedId = data.auto_select_id;
+    if (data.auto_select_id) {
+      state.selectedId     = data.auto_select_id;
+      state.selectedOrigin = "hashes";
+    }
   } catch (e) {
     toast(e.message, "error");
     renderApp({ error: e.message });
@@ -595,63 +589,67 @@ function renderApp({ loading = false, error = null } = {}) {
       </div>
       <div class="item-actions">
         <button class="btn btn-green" id="btn-commit">✓ Commit selected</button>
-        <button class="btn btn-ghost" id="btn-no-match">✗ No match</button>
         ${item.has_ids_hash ? `<button class="btn btn-yellow" id="btn-rematch">⟳ Rematch</button>` : ""}
-        <button class="btn btn-ghost" id="btn-skip">Skip</button>
       </div>
     </div>
   `;
 
+  // ── Helper to render a candidate card (used for both hashes and partner) ──
+  function candidateCard(c, isAutoSelectId) {
+    const isSelected = state.selectedId === c.id && state.selectedOrigin === c.origin;
+    // Uniquely identify: id + origin to avoid collisions between hashes/partner
+    const uid = `${c.origin}-${c.id}`;
+    const isAutoSel = isAutoSelectId && !state.selectedId;
+    const cls = isSelected ? "selected" : (isAutoSel ? "auto-selected" : "");
+    const dist = c.hamming_distance;
+    const distCls = dist === null ? "" : dist <= 5 ? "good" : dist <= 12 ? "ok" : "bad";
+    const cTs = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : "";
+    const sizeStr = (c.width && c.height) ? `${c.width}×${c.height}` : "";
+    const fsStr = c.filesize ? (c.filesize >= 1048576
+      ? `${(c.filesize/1048576).toFixed(1)} MB`
+      : `${Math.round(c.filesize/1024)} KB`) : "";
+    const originCls = c.origin === "partner" ? "badge-partner" : "badge-hashes";
+    return `
+      <div class="candidate-card ${cls}" data-id="${c.id}" data-origin="${c.origin}">
+        ${isAutoSel ? `<div class="auto-tag">Auto ⚡</div>` : ""}
+        <div class="selected-check">✓</div>
+        <img class="candidate-thumb" src="${escHtml(c.thumbnail_url)}"
+             alt="candidate" loading="lazy"
+             onerror="this.outerHTML='<div class=candidate-thumb-ph>🖼️</div>'">
+        <div class="candidate-info">
+          <div class="candidate-filename">${escHtml(c.filename || "")}</div>
+          <div class="candidate-badges">
+            <span class="dist-badge ${originCls}">${c.origin}</span>
+            ${dist !== null ? `<span class="dist-badge ${distCls}">H:${dist}</span>` : ""}
+            ${c.thumb_dist != null ? `<span class="dist-badge">T:${c.thumb_dist.toFixed(1)}</span>` : ""}
+            ${c.camera_name ? `<span class="dist-badge" style="background:rgba(34,197,94,.1);color:#4ade80">📷</span>` : ""}
+            ${c.location ? `<span class="dist-badge" style="background:rgba(59,130,246,.1);color:#60a5fa">📍</span>` : ""}
+          </div>
+          <div class="candidate-ts">
+            ${[cTs, sizeStr, fsStr].filter(Boolean).join(" · ")}
+          </div>
+          ${c.url ? `<div class="candidate-ts"><a href="${escHtml(c.url)}" target="_blank">🔗 link</a></div>` : ""}
+        </div>
+      </div>`;
+  }
+
   // Candidates
-  html += `<div class="section-title">${candidates.length} candidate match${candidates.length !== 1 ? "es" : ""}</div>`;
-  if (candidates.length === 0) {
+  const showPartner = localStorage.getItem("opt-show-partner") !== "false";
+  const allCandidates = [
+    ...candidates,
+    ...(showPartner ? partner_candidates : []),
+  ];
+  const totalCount = candidates.length + (showPartner ? partner_candidates.length : 0);
+
+  html += `<div class="section-title">${candidates.length} candidate match${candidates.length !== 1 ? "es" : ""}${showPartner && partner_candidates.length ? ` + ${partner_candidates.length} partner` : ""}</div>`;
+  if (allCandidates.length === 0) {
     html += `<div class="empty-state" style="padding:30px"><p>No candidates found within threshold.</p></div>`;
   } else {
     html += `<div id="candidates-grid">`;
-    for (const c of candidates) {
-      const isSelected  = state.selectedId === c.id;
-      const isAutoSel   = auto_select_id === c.id && !state.selectedId;
-      const cls = isSelected ? "selected" : (isAutoSel && !state.selectedId ? "auto-selected" : "");
-      const dist = c.hamming_distance;
-      const distCls = dist === null ? "" : dist <= 5 ? "good" : dist <= 12 ? "ok" : "bad";
-      const cTs = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : "";
-      html += `
-        <div class="candidate-card ${cls}" data-id="${c.id}">
-          ${isAutoSel ? `<div class="auto-tag">Auto ⚡</div>` : ""}
-          <div class="selected-check">✓</div>
-          <img class="candidate-thumb" src="/api/thumbnail/${c.id}"
-               alt="candidate" loading="lazy"
-               onerror="this.outerHTML='<div class=candidate-thumb-ph>🖼️</div>'">
-          <div class="candidate-info">
-            <div class="candidate-filename">${escHtml(c.filename || "")}</div>
-            <div class="candidate-badges">
-              ${dist !== null ? `<span class="dist-badge ${distCls}">H:${dist}</span>` : ""}
-              ${c.thumb_dist !== null ? `<span class="dist-badge">T:${c.thumb_dist?.toFixed(1)}</span>` : ""}
-              ${c.camera_name ? `<span class="dist-badge" style="background:rgba(34,197,94,.1);color:#4ade80">📷</span>` : ""}
-              ${c.location ? `<span class="dist-badge" style="background:rgba(59,130,246,.1);color:#60a5fa">📍</span>` : ""}
-            </div>
-            ${cTs ? `<div class="candidate-ts">${cTs}</div>` : ""}
-            ${c.url ? `<div class="candidate-ts"><a href="${escHtml(c.url)}" target="_blank">🔗 link</a></div>` : ""}
-          </div>
-        </div>`;
+    for (const c of allCandidates) {
+      html += candidateCard(c, auto_select_id === c.id && c.origin === "hashes");
     }
     html += `</div>`;
-  }
-
-  // Partner
-  const showPartner = localStorage.getItem("opt-show-partner") !== "false";
-  if (showPartner && partner_candidates.length > 0) {
-    html += `<div id="partner-section">
-      <div class="section-title" style="color:var(--blue)">Partner — ${partner_candidates.length} result${partner_candidates.length !== 1 ? "s" : ""}</div>
-      <div id="partner-grid">`;
-    for (const p of partner_candidates) {
-      const pTs = p.timestamp ? new Date(p.timestamp).toLocaleDateString() : "";
-      html += `<div class="partner-card">
-        <div class="partner-filename">${escHtml(p.filename || "")}</div>
-        <div class="partner-meta">${[p.camera_name, p.location, pTs].filter(Boolean).join(" · ")}</div>
-      </div>`;
-    }
-    html += `</div></div>`;
   }
 
   app.innerHTML = html;
@@ -661,37 +659,30 @@ function renderApp({ loading = false, error = null } = {}) {
   qs("#btn-next")?.addEventListener("click", () => loadMatch(state.offset + 1));
   qs("#btn-refresh")?.addEventListener("click", () => loadMatch(state.offset, true));
   qs("#btn-commit")?.addEventListener("click", doCommit);
-  qs("#btn-no-match")?.addEventListener("click", doNoMatch);
   qs("#btn-rematch")?.addEventListener("click", doRematch);
-  qs("#btn-skip")?.addEventListener("click", doSkip);
 
   qsa(".candidate-card").forEach(card => {
     card.addEventListener("click", () => {
-      const id = parseInt(card.dataset.id);
-      if (state.selectedId === id) {
-        state.selectedId = null;
-        qsa(".candidate-card").forEach(c => c.classList.remove("selected"));
-        card.classList.remove("selected");
+      const id     = parseInt(card.dataset.id);
+      const origin = card.dataset.origin;
+      if (state.selectedId === id && state.selectedOrigin === origin) {
+        // Deselect
+        state.selectedId     = null;
+        state.selectedOrigin = null;
+        qsa(".candidate-card").forEach(c => c.classList.remove("selected", "auto-selected"));
+        // Re-show auto tag if one exists
+        if (auto_select_id) {
+          const ac = qs(`[data-id="${auto_select_id}"][data-origin="hashes"]`);
+          if (ac) ac.classList.add("auto-selected");
+        }
       } else {
-        state.selectedId = id;
+        state.selectedId     = id;
+        state.selectedOrigin = origin;
         qsa(".candidate-card").forEach(c => c.classList.remove("selected", "auto-selected"));
         card.classList.add("selected");
       }
     });
-    if (auto_select_id && !state.selectedId) {
-      const ac = qs(`[data-id="${auto_select_id}"]`);
-      if (ac) ac.classList.add("auto-selected");
-    }
   });
-
-  // Restore auto-select classes if state.selectedId was pre-set
-  if (state.selectedId) {
-    const sc = qs(`[data-id="${state.selectedId}"]`);
-    if (sc) {
-      sc.classList.add("selected");
-      sc.classList.remove("auto-selected");
-    }
-  }
 }
 
 function escHtml(s) {
@@ -704,7 +695,8 @@ function escHtml(s) {
 
 // ── Actions ───────────────────────────────────────────────────────────────────
 async function doCommit() {
-  const effectiveId = state.selectedId || state.data?.auto_select_id;
+  const effectiveId     = state.selectedId     ?? state.data?.auto_select_id;
+  const effectiveOrigin = state.selectedOrigin ?? "hashes";
   if (!effectiveId) { toast("Select a candidate first", "error"); return; }
   const btn = qs("#btn-commit");
   btn.classList.add("loading"); btn.textContent = "Committing…";
@@ -725,22 +717,6 @@ async function doCommit() {
   }
 }
 
-async function doNoMatch() {
-  if (!state.data?.item) return;
-  try {
-    await apiFetch("/api/match/commit", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wa_id: state.data.item.id, hash_id: null, offset: state.offset }),
-    });
-    matchCache.delete(state.offset);
-    toast("Marked as no match", "info");
-    await loadMatch(state.offset, true);
-  } catch (e) {
-    toast(e.message, "error");
-  }
-}
-
 async function doRematch() {
   if (!state.data?.item) return;
   try {
@@ -751,22 +727,6 @@ async function doRematch() {
     });
     matchCache.delete(state.offset);
     toast("Reset for rematch", "info");
-    await loadMatch(state.offset, true);
-  } catch (e) {
-    toast(e.message, "error");
-  }
-}
-
-async function doSkip() {
-  if (!state.data?.item) return;
-  try {
-    await apiFetch("/api/match/skip", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ wa_id: state.data.item.id }),
-    });
-    matchCache.delete(state.offset);
-    toast("Skipped", "info");
     await loadMatch(state.offset, true);
   } catch (e) {
     toast(e.message, "error");
@@ -853,7 +813,6 @@ document.addEventListener("keydown", e => {
   if (e.key === "ArrowRight" || e.key === "n") loadMatch(state.offset + 1);
   if (e.key === "ArrowLeft"  || e.key === "p") loadMatch(Math.max(0, state.offset - 1));
   if (e.key === "r") loadMatch(state.offset, true);
-  if (e.key === "s") doSkip();
   // Select candidate by number
   const num = parseInt(e.key);
   if (num >= 1 && num <= 9) {
