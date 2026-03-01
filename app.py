@@ -450,6 +450,7 @@ def api_match(offset=0):
             if filetype in ("Video", "video/mp4"):
                 cur.execute("""
                     SELECT id, filename, camera_name, location, timestamp, url,
+                           size, filesize,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM partner
@@ -464,6 +465,7 @@ def api_match(offset=0):
             elif filetype in ("Image", "image/jpeg"):
                 cur.execute("""
                     SELECT id, filename, camera_name, location, timestamp, url,
+                           size, filesize,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM partner
                     WHERE hash <@ (%s, %s)
@@ -483,6 +485,8 @@ def api_match(offset=0):
                     "thumbnail_url": f"/api/partner-thumbnail/{p['id']}",
                     "source":        "partner",
                     "origin":        None,
+                    "size":          p.get("size"),
+                    "filesize":      p.get("filesize"),
                     "hamming_distance": hamming_distance(row["hash"], p.get("hash")),
                     "preview_url":   p.get("preview_url"),
                 })

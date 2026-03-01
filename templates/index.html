@@ -129,12 +129,12 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
   display: flex; gap: 12px; padding: 12px;
 }
 .item-thumb {
-  width: 100px; height: 100px; object-fit: cover;
+  width: 128px; height: 128px; object-fit: contain;
   border-radius: 10px; flex-shrink: 0;
   background: var(--border);
 }
 .item-thumb-placeholder {
-  width: 100px; height: 100px; border-radius: 10px;
+  width: 128px; height: 128px; border-radius: 10px;
   background: var(--border); flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: 2rem; color: var(--muted);
@@ -183,7 +183,7 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 
 .candidate-thumb {
   width: 100%; aspect-ratio: 1;
-  object-fit: cover; background: var(--border);
+  object-fit: contain; background: var(--border);
 }
 .candidate-thumb-ph {
   width: 100%; aspect-ratio: 1;
@@ -234,13 +234,26 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 .candidate-card[data-source="partner"]:hover { border-color: var(--border); }
 /* Media preview next to WA thumbnail */
 .item-media-preview {
-  width: 100px; height: 100px; object-fit: cover;
+  width: 200px; height: 200px;
   border-radius: 10px; flex-shrink: 0;
   background: var(--border);
+  display: flex; align-items: center; justify-content: center;
+  overflow: hidden;
 }
-.item-media-video {
-  width: 100px; height: 100px; object-fit: cover;
-  border-radius: 10px; flex-shrink: 0;
+.item-media-preview img {
+  max-width: 200px; max-height: 200px;
+  width: auto; height: auto;
+  object-fit: contain; border-radius: 8px;
+}
+.item-media-preview video {
+  max-width: 200px; max-height: 200px;
+  width: auto; height: auto;
+  border-radius: 8px;
+}
+@media (min-width: 640px) {
+  .item-media-preview { width: 240px; height: 240px; }
+  .item-media-preview img,
+  .item-media-preview video { max-width: 240px; max-height: 240px; }
 }
 
 /* ── Empty / loading states ──────────────────────────────────────────── */
@@ -325,7 +338,7 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 /* ── Responsive ──────────────────────────────────────────────────────── */
 @media (min-width: 640px) {
   #candidates-grid { grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); }
-  .item-thumb, .item-thumb-placeholder { width: 120px; height: 120px; }
+  .item-thumb, .item-thumb-placeholder { width: 128px; height: 128px; }
 }
 </style>
 </head>
