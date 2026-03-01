@@ -141,7 +141,7 @@ print("→ Committing...")
 run("lg2", "add", ".", cwd=WORK_DIR)
 status = run("lg2", "status", "--short", cwd=WORK_DIR)
 if not status:
-    run("lg2", "checkout", "main", cwd=WORK_DIR)
+    run("lg2", "checkout", "master", cwd=WORK_DIR)
     run("lg2", "branch", "-d", BRANCH, cwd=WORK_DIR)
     die("No changes — tarball is identical to main.")
 
