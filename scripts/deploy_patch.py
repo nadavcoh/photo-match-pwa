@@ -25,7 +25,7 @@ if os.path.exists(CONFIG_PATH):
 GITHUB_TOKEN = config.get("GITHUB_TOKEN", "")
 GITHUB_REPO  = config.get("GITHUB_REPO", "")
 SERVER_URL   = config.get("SERVER_URL", "")
-TARBALL      = os.path.expanduser("~/Documents/photo_match_pwa.tar.gz")
+TARBALL      = os.path.expanduser("~/Documents/patch.tar.gz")
 BRANCH       = "patch/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 PR_TITLE     = "Patch from iOS " + datetime.now().strftime("%Y-%m-%d %H:%M")
 WORK_DIR     = os.path.expanduser("~/Documents/photo_match_repo")
