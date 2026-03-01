@@ -449,7 +449,7 @@ def api_match(offset=0):
         try:
             if filetype in ("Video", "video/mp4"):
                 cur.execute("""
-                    SELECT id, filename, camera_name, location, timestamp, url,
+                    SELECT id, filename, camera_name, location, timestamp, url, hash,
                            size, filesize,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
