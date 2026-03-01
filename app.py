@@ -365,7 +365,7 @@ def api_match(offset=0):
                     candidates[0].get("camera_name")
                     and not candidates[1].get("camera_name")
                     and wa_ts and h_ts
-                    and (wa_ts - datetime.datetime.fromisoformat(candidates[0]["timestamp"])).days < 60
+                    and (wa_ts - datetime.datetime.fromisoformat(candidates[0]["timestamp"]).replace(tzinfo=None)).days < 60
                 ):
                     auto_select_id = candidates[0]["id"]
 
@@ -376,7 +376,7 @@ def api_match(offset=0):
                     recent = [
                         c for c in with_camera
                         if c.get("timestamp") and (
-                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"])
+                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"]).replace(tzinfo=None)
                         ).days < 30
                     ]
                     if recent:
@@ -391,7 +391,7 @@ def api_match(offset=0):
                     recent = [
                         c for c in with_location
                         if c.get("timestamp") and (
-                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"])
+                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"]).replace(tzinfo=None)
                         ).days < 30
                     ]
                     if recent:
