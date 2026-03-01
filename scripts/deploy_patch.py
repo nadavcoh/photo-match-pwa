@@ -154,7 +154,7 @@ run("lg2", "push", cwd=WORK_DIR)
 # PR
 print("→ Creating GitHub PR...")
 payload = json.dumps({
-    "title": PR_TITLE, "head": BRANCH, "base": "main",
+    "title": PR_TITLE, "head": BRANCH, "base": "master",
     "body": "Automated patch from iOS via a-Shell 📱",
 }).encode()
 req = urllib.request.Request(
