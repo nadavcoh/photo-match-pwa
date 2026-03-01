@@ -38,20 +38,21 @@ jobs:
           echo "════════════════════════════════════════" >&2
           echo ""                                        >&2
 
-          if [ -z "$SERVER_CERT" ]; then
-            echo "ERROR: SERVER_CERT secret is not set." >&2
-            echo "Add your server certificate PEM to:"   >&2
-            echo "  GitHub → Settings → Secrets → Actions → SERVER_CERT" >&2
-            exit 1
+          # Write cert file if the secret is set; otherwise skip HTTPS entirely
+          if [ -n "$SERVER_CERT" ]; then
+            echo "$SERVER_CERT" > /tmp/server.crt
+            echo "TLS : SERVER_CERT found — will attempt HTTPS first" >&2
+            HAVE_CERT=true
+          else
+            echo "TLS : SERVER_CERT not set — skipping HTTPS, using HTTP only" >&2
+            HAVE_CERT=false
           fi
-
-          echo "$SERVER_CERT" > /tmp/server.crt
-          echo "TLS : Using SERVER_CERT secret for certificate verification" >&2
           echo "" >&2
 
           do_curl() {
             local url="$1"
             local scheme="$2"
+            local cert_arg="$3"   # "--cacert /tmp/server.crt" or ""
 
             echo "──────────────────────────────────────────" >&2
             echo "Attempting $scheme: $url"                  >&2
@@ -67,9 +68,9 @@ jobs:
               -X POST \
               -H "Content-Type: application/json" \
               -H "X-GitHub-Event: push" \
-              -d '{"ref":"refs/heads/main"}' \
+              -d '{"ref":"refs/heads/master"}' \
               --max-time 20 \
-              --cacert /tmp/server.crt \
+              $cert_arg \
               "$url") || code="CURL_ERROR_$?"
 
             echo ""                          >&2
@@ -86,21 +87,25 @@ jobs:
             echo "$code"
           }
 
-          # ── Try HTTPS ────────────────────────────────────────────────────
-          echo "STEP 1: Trying HTTPS..." >&2
-          CODE=$(do_curl "$HTTPS_URL" "HTTPS")
+          # ── Try HTTPS (only if we have a cert) ───────────────────────────
+          if [ "$HAVE_CERT" = "true" ]; then
+            echo "STEP 1: Trying HTTPS..." >&2
+            CODE=$(do_curl "$HTTPS_URL" "HTTPS" "--cacert /tmp/server.crt")
 
-          if [ "$CODE" = "200" ]; then
-            echo "✓ HTTPS deploy succeeded (HTTP $CODE)" >&2
-            exit 0
+            if [ "$CODE" = "200" ]; then
+              echo "✓ HTTPS deploy succeeded (HTTP $CODE)" >&2
+              exit 0
+            fi
+
+            echo "✗ HTTPS failed (code='$CODE')" >&2
+            echo ""                              >&2
+            echo "STEP 2: Falling back to HTTP..." >&2
+          else
+            echo "STEP 1: Trying HTTP (no SERVER_CERT set)..." >&2
           fi
 
-          echo "✗ HTTPS failed (code='$CODE')" >&2
-          echo ""                              >&2
-
-          # ── Fall back to HTTP ────────────────────────────────────────────
-          echo "STEP 2: Falling back to HTTP..." >&2
-          CODE=$(do_curl "$HTTP_URL" "HTTP")
+          # ── Try HTTP ─────────────────────────────────────────────────────
+          CODE=$(do_curl "$HTTP_URL" "HTTP" "")
 
           if [ "$CODE" = "200" ]; then
             echo "✓ HTTP deploy succeeded (HTTP $CODE)" >&2
@@ -115,6 +120,6 @@ jobs:
           echo "   1. Tailscale is running on the server" >&2
           echo "   2. Flask is running (run.bat / run.sh)" >&2
           echo "   3. Port $PORT is correct"             >&2
-          echo "   4. SERVER_CERT matches the server cert" >&2
+          echo "   4. SERVER_CERT matches the server cert (if using HTTPS)" >&2
           echo "════════════════════════════════════════" >&2
           exit 1
