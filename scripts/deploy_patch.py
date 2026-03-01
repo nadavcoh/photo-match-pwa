@@ -25,7 +25,7 @@ if os.path.exists(CONFIG_PATH):
 GITHUB_TOKEN = config.get("GITHUB_TOKEN", "")
 GITHUB_REPO  = config.get("GITHUB_REPO", "")
 SERVER_URL   = config.get("SERVER_URL", "")
-TARBALL      = os.path.expanduser("~/Documents/photo_match_patch.tar.gz")
+TARBALL      = os.path.expanduser("~/Documents/patch.tar.gz")
 BRANCH       = "patch/" + datetime.now().strftime("%Y%m%d-%H%M%S")
 PR_TITLE     = "Patch from iOS " + datetime.now().strftime("%Y-%m-%d %H:%M")
 WORK_DIR     = os.path.expanduser("~/Documents/photo_match_repo")
@@ -141,7 +141,7 @@ print("→ Committing...")
 run("lg2", "add", ".", cwd=WORK_DIR)
 status = run("lg2", "status", "--short", cwd=WORK_DIR)
 if not status:
-    run("lg2", "checkout", "main", cwd=WORK_DIR)
+    run("lg2", "checkout", "master", cwd=WORK_DIR)
     run("lg2", "branch", "-d", BRANCH, cwd=WORK_DIR)
     die("No changes — tarball is identical to main.")
 
