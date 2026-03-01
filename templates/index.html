@@ -596,7 +596,7 @@ function renderApp({ loading = false, error = null } = {}) {
 
   // ── Helper to render a candidate card (used for both hashes and partner) ──
   function candidateCard(c, isAutoSelectId) {
-    const isSelected = state.selectedId === c.id && c.origin === (state.selectedOrigin || c.origin);
+    const isSelected = state.selectedId === c.id && state.selectedOrigin === c.origin;
     // Uniquely identify: id + origin to avoid collisions between hashes/partner
     const uid = `${c.origin}-${c.id}`;
     const isAutoSel = isAutoSelectId && !state.selectedId;
