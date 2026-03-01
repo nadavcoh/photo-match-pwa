@@ -175,7 +175,7 @@ except urllib.error.HTTPError as e:
     body = json.loads(e.read())
     die(f"GitHub API: {body.get('message', str(e))}")
 
-run("lg2", "checkout", "main", cwd=WORK_DIR)
+run("lg2", "checkout", "master", cwd=WORK_DIR)
 print(f"\n✓ Done! PR created: {pr_url}")
 try:
     run("open", pr_url)
