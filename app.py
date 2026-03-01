@@ -247,8 +247,8 @@ def serve_partner_thumbnail(partner_id):
             resp = send_from_directory(THUMB_CACHE_DIR, f"partner_{partner_id}.jpg", mimetype="image/jpeg")
             resp.headers["Cache-Control"] = "public, max-age=86400"
             return resp
-    except Exception:
-        pass
+    except Exception as e:
+        app.logger.error(f"Error serving partner thumbnail for id {partner_id}: {e}", exc_info=True)
     abort(404)
 
 @app.route("/api/wa-thumbnail/<int:wa_id>")
