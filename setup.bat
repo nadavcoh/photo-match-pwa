@@ -24,7 +24,7 @@ if errorlevel 1 (
 )
 
 echo -- Installing dependencies...
-venv\Scripts\pip install --upgrade pip --quiet
+venv\Scripts\python -m pip install --upgrade pip --quiet
 venv\Scripts\pip install -r requirements.txt
 if errorlevel 1 (
     echo ERROR: pip install failed.
