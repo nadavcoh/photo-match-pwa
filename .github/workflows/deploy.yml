@@ -19,8 +19,8 @@ jobs:
       - name: Trigger deployment webhook
         env:
           SERVER_CERT: ${{ secrets.SERVER_CERT }}
-          HOST: ${{ vars.HOST }}
-          PORT: ${{ vars.PORT }}
+          HOST: ${{ vars.SERVER_HOST }}
+          PORT: ${{ vars.SERVER_PORT }}
         run: |
           HTTPS_URL="https://$HOST:$PORT/webhook"
           HTTP_URL="http://$HOST:$PORT/webhook"
