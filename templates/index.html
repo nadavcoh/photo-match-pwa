@@ -228,6 +228,10 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
 #partner-section { margin-bottom: 16px; }
 .badge-partner { background: rgba(59,130,246,.15); color: #60a5fa; }
 .badge-hashes  { background: rgba(168,85,247,.15);  color: #c084fc; }
+.candidate-card[data-origin="partner"] {
+  cursor: default; opacity: .85;
+}
+.candidate-card[data-origin="partner"]:hover { border-color: var(--border); }
 
 /* ── Empty / loading states ──────────────────────────────────────────── */
 .loading-spinner {
@@ -604,11 +608,8 @@ function renderApp({ loading = false, error = null } = {}) {
     const dist = c.hamming_distance;
     const distCls = dist === null ? "" : dist <= 5 ? "good" : dist <= 12 ? "ok" : "bad";
     const cTs = c.timestamp ? new Date(c.timestamp).toLocaleDateString() : "";
-    const sizeStr = (c.width && c.height) ? `${c.width}×${c.height}` : "";
-    const fsStr = c.filesize ? (c.filesize >= 1048576
-      ? `${(c.filesize/1048576).toFixed(1)} MB`
-      : `${Math.round(c.filesize/1024)} KB`) : "";
     const originCls = c.origin === "partner" ? "badge-partner" : "badge-hashes";
+    const originLabel = c.origin || "hashes";
     return `
       <div class="candidate-card ${cls}" data-id="${c.id}" data-origin="${c.origin}">
         ${isAutoSel ? `<div class="auto-tag">Auto ⚡</div>` : ""}
@@ -626,7 +627,7 @@ function renderApp({ loading = false, error = null } = {}) {
             ${c.location ? `<span class="dist-badge" style="background:rgba(59,130,246,.1);color:#60a5fa">📍</span>` : ""}
           </div>
           <div class="candidate-ts">
-            ${[cTs, sizeStr, fsStr].filter(Boolean).join(" · ")}
+            ${cTs}
           </div>
           ${c.url ? `<div class="candidate-ts"><a href="${escHtml(c.url)}" target="_blank">🔗 link</a></div>` : ""}
         </div>
@@ -662,6 +663,9 @@ function renderApp({ loading = false, error = null } = {}) {
   qs("#btn-rematch")?.addEventListener("click", doRematch);
 
   qsa(".candidate-card").forEach(card => {
+    // Partner cards are display-only — cannot be committed
+    if (card.dataset.origin === "partner") return;
+
     card.addEventListener("click", () => {
       const id     = parseInt(card.dataset.id);
       const origin = card.dataset.origin;

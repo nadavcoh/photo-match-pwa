@@ -321,7 +321,7 @@ def api_match(offset=0):
             cur.execute("""
                 SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                        timestamp, url, preview_url,
-                       width, height, filesize,
+                       origin,
                        video_thumb_hash <-> %s AS thumb_dist
                 FROM hashes
                 WHERE id = ANY(%s)
@@ -333,7 +333,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           width, height, filesize,
+                           origin,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM hashes
@@ -349,7 +349,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           width, height, filesize,
+                           origin,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM hashes
                     WHERE hash <@ (%s, %s)
@@ -373,10 +373,7 @@ def api_match(offset=0):
                 "thumb_to_hash": float(c["thumb_to_hash"]) if c.get("thumb_to_hash") is not None else None,
                 "thumbnail_url": f"/api/thumbnail/{c['id']}",
                 "hamming_distance": hamming_distance(row["hash"], c["hash"]),
-                "origin":        "hashes",
-                "width":         c.get("width"),
-                "height":        c.get("height"),
-                "filesize":      c.get("filesize"),
+                "origin":        c.get("origin") or "hashes",
             }
             candidates.append(cd)
 
@@ -469,9 +466,6 @@ def api_match(offset=0):
                     "thumb_to_hash": float(p["thumb_to_hash"]) if p.get("thumb_to_hash") is not None else None,
                     "thumbnail_url": f"/api/partner-thumbnail/{p['id']}",
                     "origin":        "partner",
-                    "width":         p.get("width"),
-                    "height":        p.get("height"),
-                    "filesize":      p.get("filesize"),
                     "hamming_distance": hamming_distance(row["hash"], p.get("hash")),
                     "preview_url":   p.get("preview_url"),
                 })
