@@ -627,7 +627,7 @@ function renderApp({ loading = false, error = null } = {}) {
         ${(item.filename || "").toLowerCase().startsWith("media") ? `
           <div class="item-media-preview">
             ${(item.filename || "").toLowerCase().endsWith(".mp4")
-              ? `<video src="/static/${escHtml(item.filename)}" controls autoplay muted loop playsinline style="max-height:80vw;width:100%"></video>`
+              ? `<video src="/static/${escHtml(item.filename)}" controls autoplay muted loop playsinline></video>`
               : `<img src="/static/${escHtml(item.filename)}" alt="media preview"
                    onerror="this.parentElement.style.display='none'">`}
           </div>` : ""}
