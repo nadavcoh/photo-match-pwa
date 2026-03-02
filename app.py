@@ -18,6 +18,11 @@ import hashlib
 import datetime
 import functools
 from io import BytesIO
+try:
+    from PIL import Image as PILImage
+    _PIL_AVAILABLE = True
+except ImportError:
+    _PIL_AVAILABLE = False
 
 from flask import (
     Flask, request, jsonify, render_template, g, send_from_directory, abort
@@ -105,6 +110,26 @@ def hamming_distance(h1, h2):
     if h1 is None or h2 is None:
         return None
     return bin(int(h1) ^ int(h2)).count("1")
+
+def pixel_distance(thumb_a: bytes, thumb_b: bytes, size: int = 32) -> float | None:
+    """
+    Mean Absolute Error between two thumbnail images, scaled 0-100.
+    Both are resized to `size`x`size` greyscale before comparison.
+    Lower = more similar. Returns None if PIL unavailable or images unreadable.
+    """
+    if not _PIL_AVAILABLE or not thumb_a or not thumb_b:
+        return None
+    try:
+        def load(data):
+            if isinstance(data, memoryview):
+                data = bytes(data)
+            img = PILImage.open(BytesIO(data)).convert("L").resize((size, size), PILImage.LANCZOS)
+            return list(img.getdata())
+        pa, pb = load(thumb_a), load(thumb_b)
+        mae = sum(abs(a - b) for a, b in zip(pa, pb)) / len(pa)
+        return round(mae / 255 * 100, 1)  # 0-100 scale
+    except Exception:
+        return None
 
 def row_to_dict(row):
     d = dict(row)
@@ -334,7 +359,7 @@ def api_match(offset=0):
             cur.execute("""
                 SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                        timestamp, url, preview_url,
-                       origin, size, filesize,
+                       origin, size, filesize, thumbnail,
                        video_thumb_hash <-> %s AS thumb_dist
                 FROM hashes
                 WHERE id = ANY(%s)
@@ -346,7 +371,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           origin, size, filesize,
+                           origin, size, filesize, thumbnail,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM hashes
@@ -362,7 +387,7 @@ def api_match(offset=0):
                 cur.execute("""
                     SELECT id, filename, hash, video_thumb_hash, camera_name, location,
                            timestamp, url, preview_url,
-                           origin, size, filesize,
+                           origin, size, filesize, thumbnail,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM hashes
                     WHERE hash <@ (%s, %s)
@@ -390,6 +415,7 @@ def api_match(offset=0):
                 "origin":        c.get("origin"),
                 "size":          c.get("size"),
                 "filesize":      c.get("filesize"),
+                "pixel_dist":    pixel_distance(row["thumbnail"], c.get("thumbnail")),
             }
             candidates.append(cd)
 
@@ -463,6 +489,18 @@ def api_match(offset=0):
                         if len(best) == 1:
                             auto_select_id = best[0]["id"]
 
+        # ── Pixel-distance fallback ─────────────────────────────────────────────
+        # If no auto-select was found and thumbnails are available, pick the
+        # single hashes candidate with the lowest pixel distance as a suggestion.
+        if auto_select_id is None and candidates:
+            scored = [c for c in candidates if c.get("pixel_dist") is not None]
+            if scored:
+                best_px = min(scored, key=lambda c: c["pixel_dist"])
+                # Only auto-select if it's meaningfully better than the rest
+                others = [c for c in scored if c["id"] != best_px["id"]]
+                if not others or best_px["pixel_dist"] < min(c["pixel_dist"] for c in others) - 2:
+                    auto_select_id = best_px["id"]
+
         # ── Partner candidates ───────────────────────────────────────────────
         partner_candidates = []
         filetype = row["filetype"] or ""
@@ -470,7 +508,7 @@ def api_match(offset=0):
             if filetype in ("Video", "video/mp4"):
                 cur.execute("""
                     SELECT id, filename, camera_name, location, timestamp, url, hash,
-                           size, filesize,
+                           size, filesize, thumbnail,
                            video_thumb_hash <-> %s AS thumb_dist,
                            hash <-> %s AS thumb_to_hash
                     FROM partner
@@ -485,7 +523,7 @@ def api_match(offset=0):
             elif filetype in ("Image", "image/jpeg"):
                 cur.execute("""
                     SELECT id, filename, camera_name, location, timestamp, url, hash,
-                           size, filesize,
+                           size, filesize, thumbnail,
                            video_thumb_hash <-> %s AS thumb_dist
                     FROM partner
                     WHERE hash <@ (%s, %s)
@@ -509,6 +547,7 @@ def api_match(offset=0):
                     "filesize":      p.get("filesize"),
                     "hamming_distance": hamming_distance(row["hash"], p.get("hash")),
                     "preview_url":   p.get("preview_url"),
+                    "pixel_dist":    pixel_distance(row["thumbnail"], p.get("thumbnail")),
                 })
         except Exception:
             pass  # partner table may not exist
