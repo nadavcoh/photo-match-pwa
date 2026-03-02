@@ -393,53 +393,73 @@ def api_match(offset=0):
             }
             candidates.append(cd)
 
-        # ── Auto-select logic ────────────────────────────────────────────────
+        # ── Auto-select logic (faithful to original gphoto-phash-flask) ────────
         auto_select_id = None
         filetype = row["filetype"] or ""
+        # wa_ts always timezone-naive for comparisons
+        wa_ts_raw = row["timestamp"]
+        wa_ts = wa_ts_raw.replace(tzinfo=None) if wa_ts_raw else None
+
+        def ts_naive(iso_str):
+            """Parse an ISO timestamp string and strip tzinfo."""
+            if not iso_str:
+                return None
+            return datetime.datetime.fromisoformat(iso_str).replace(tzinfo=None)
 
         if len(candidates) == 2:
             if filetype in ("Video", "video/mp4"):
+                # Auto-select first candidate if it has location and second does not
                 if candidates[0].get("location") and not candidates[1].get("location"):
                     auto_select_id = candidates[0]["id"]
             elif filetype in ("Image", "image/jpeg"):
-                wa_ts = row["timestamp"]
-                h_ts = candidates[0].get("timestamp")
+                # Auto-select first candidate if it has camera_name, second does not,
+                # and timestamp is within 60 days of wa item (matching original)
+                h_ts = ts_naive(candidates[0].get("timestamp"))
                 if (
                     candidates[0].get("camera_name")
                     and not candidates[1].get("camera_name")
                     and wa_ts and h_ts
-                    and (wa_ts - datetime.datetime.fromisoformat(candidates[0]["timestamp"]).replace(tzinfo=None)).days < 60
+                    and wa_ts - h_ts < datetime.timedelta(days=60)
                 ):
                     auto_select_id = candidates[0]["id"]
 
         elif len(candidates) > 2:
             if filetype in ("Image", "image/jpeg"):
+                # Filter: has camera_name AND timestamp within 30 days of wa item
                 with_camera = [c for c in candidates if c.get("camera_name")]
-                if wa_ts := row["timestamp"]:
+                if wa_ts:
                     recent = [
                         c for c in with_camera
-                        if c.get("timestamp") and (
-                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"]).replace(tzinfo=None)
-                        ).days < 30
+                        if ts_naive(c.get("timestamp")) is not None
+                        and wa_ts - ts_naive(c["timestamp"]) < datetime.timedelta(days=30)
                     ]
                     if recent:
-                        min_dist = min(c["hamming_distance"] or 999 for c in recent)
+                        # Pick the single candidate with minimum hamming_distance
+                        # Use explicit None check — 0 is a valid (perfect) distance
+                        min_dist = min(
+                            c["hamming_distance"] if c["hamming_distance"] is not None else 999
+                            for c in recent
+                        )
                         best = [c for c in recent if c["hamming_distance"] == min_dist]
                         if len(best) == 1:
                             auto_select_id = best[0]["id"]
 
             elif filetype in ("Video", "video/mp4"):
+                # Filter: has location AND timestamp within 30 days of wa item
                 with_location = [c for c in candidates if c.get("location")]
-                if wa_ts := row["timestamp"]:
+                if wa_ts:
                     recent = [
                         c for c in with_location
-                        if c.get("timestamp") and (
-                            wa_ts - datetime.datetime.fromisoformat(c["timestamp"]).replace(tzinfo=None)
-                        ).days < 30
+                        if ts_naive(c.get("timestamp")) is not None
+                        and wa_ts - ts_naive(c["timestamp"]) < datetime.timedelta(days=30)
                     ]
                     if recent:
-                        min_dist = min(c.get("thumb_dist") or 999 for c in recent)
-                        best = [c for c in recent if c.get("thumb_dist") == min_dist]
+                        # Pick the single candidate with minimum thumb_dist (perceptual hash dist)
+                        min_dist = min(
+                            c["thumb_dist"] if c["thumb_dist"] is not None else 999
+                            for c in recent
+                        )
+                        best = [c for c in recent if c["thumb_dist"] == min_dist]
                         if len(best) == 1:
                             auto_select_id = best[0]["id"]
 

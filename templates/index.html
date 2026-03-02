@@ -232,28 +232,34 @@ main { padding: 12px 14px; max-width: 960px; margin: 0 auto; }
   cursor: default; opacity: .85;
 }
 .candidate-card[data-source="partner"]:hover { border-color: var(--border); }
-/* Media preview next to WA thumbnail */
+/* Media preview — spans full card width below thumbnail row on mobile */
+.item-card-has-media {
+  flex-direction: column;
+}
+.item-card-top {
+  display: flex; gap: 12px;
+}
 .item-media-preview {
-  width: 200px; height: 200px;
-  border-radius: 10px; flex-shrink: 0;
+  width: 100%;
+  border-radius: 10px;
   background: var(--border);
   display: flex; align-items: center; justify-content: center;
   overflow: hidden;
 }
 .item-media-preview img {
-  max-width: 200px; max-height: 200px;
-  width: auto; height: auto;
-  object-fit: contain;
+  width: 100%; height: auto; max-height: 80vw;
+  object-fit: contain; display: block;
 }
 .item-media-preview video {
-  max-width: 200px; max-height: 200px;
-  width: auto; height: auto;
-  object-fit: contain;
+  width: 100%; height: auto; max-height: 80vw;
+  display: block;
 }
 @media (min-width: 640px) {
-  .item-media-preview { width: 240px; height: 240px; }
+  .item-card-has-media { flex-direction: row; align-items: flex-start; }
+  .item-card-top { flex-direction: column; flex-shrink: 0; }
+  .item-media-preview { width: 360px; flex: 0 0 360px; }
   .item-media-preview img,
-  .item-media-preview video { max-width: 240px; max-height: 240px; }
+  .item-media-preview video { max-height: 360px; }
 }
 
 /* ── Empty / loading states ──────────────────────────────────────────── */
@@ -600,10 +606,21 @@ function renderApp({ loading = false, error = null } = {}) {
     <!-- Item card -->
     <div class="section-title">Item to match</div>
     <div id="item-card">
-      <div class="item-card-inner">
-        <img class="item-thumb" src="/api/wa-thumbnail/${item.id}"
-             alt="thumbnail" loading="lazy"
-             onerror="this.outerHTML='<div class=item-thumb-placeholder>🖼️</div>'">
+      <div class="item-card-inner ${(item.filename||'').toLowerCase().startsWith('media') ? 'item-card-has-media' : ''}">
+        <div class="item-card-top">
+          <img class="item-thumb" src="/api/wa-thumbnail/${item.id}"
+               alt="thumbnail" loading="lazy"
+               onerror="this.outerHTML='<div class=item-thumb-placeholder>🖼️</div>'">
+          <div class="item-meta">
+            <div class="item-filename">${escHtml(item.filename || "(no filename)")}</div>
+            <div class="meta-row">
+              ${ftBadge}
+              ${rematchBadge}
+              ${ts ? `<span class="badge">${ts}</span>` : ""}
+              <span class="badge">#${item.id}</span>
+            </div>
+          </div>
+        </div>
         ${(item.filename || "").toLowerCase().startsWith("media") ? `
           <div class="item-media-preview">
             ${(item.filename || "").toLowerCase().endsWith(".mp4")
@@ -611,15 +628,6 @@ function renderApp({ loading = false, error = null } = {}) {
               : `<img src="/static/${escHtml(item.filename)}" alt="media preview"
                    onerror="this.parentElement.style.display='none'">`}
           </div>` : ""}
-        <div class="item-meta">
-          <div class="item-filename">${escHtml(item.filename || "(no filename)")}</div>
-          <div class="meta-row">
-            ${ftBadge}
-            ${rematchBadge}
-            ${ts ? `<span class="badge">${ts}</span>` : ""}
-            <span class="badge">#${item.id}</span>
-          </div>
-        </div>
       </div>
       <div class="item-actions">
         <button class="btn btn-green" id="btn-commit">✓ Commit selected</button>
