@@ -21,4 +21,5 @@ if not exist venv\Scripts\python.exe (
 )
 
 call venv\Scripts\activate.bat
+title Photo Match PWA
 python app.py %*
